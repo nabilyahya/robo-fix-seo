@@ -1,4 +1,5 @@
 "use client";
+import { useEffect, useState } from "react";
 import { Wrench, Settings, Battery, Smartphone } from "lucide-react";
 import { motion, useReducedMotion, type Variants } from "framer-motion";
 
@@ -20,8 +21,16 @@ const cardVariants: Variants = {
   },
 };
 
+function useMounted() {
+  const [m, setM] = useState(false);
+  useEffect(() => setM(true), []);
+  return m;
+}
+
 const ServicesSection = () => {
   const reduce = useReducedMotion();
+  const mounted = useMounted();
+  const canAnimate = mounted && !reduce; // فعّل الأنيميشن فقط بعد mount وعلى الأجهزة بدون "تقليل الحركة"
 
   const services = [
     {
@@ -61,17 +70,17 @@ const ServicesSection = () => {
 
       <motion.div
         className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3 p-4"
-        variants={reduce ? undefined : containerVariants}
-        initial={reduce ? undefined : "hidden"}
-        whileInView={reduce ? undefined : "show"}
-        viewport={{ once: true, amount: 0.18 }}
+        variants={canAnimate ? containerVariants : undefined}
+        initial={canAnimate ? "hidden" : false} // على السيرفر: false => بدون opacity:0
+        whileInView={canAnimate ? "show" : undefined}
+        viewport={canAnimate ? { once: true, amount: 0.18 } : undefined}
       >
         {services.map((service) => (
           <motion.article
             key={service.title}
-            variants={reduce ? undefined : cardVariants}
+            variants={canAnimate ? cardVariants : undefined}
             className="group flex flex-1 gap-3 rounded-lg border border-border bg-card p-4 flex-col shadow-card hover:shadow-lg transition-all duration-300 min-h-[140px] sm:min-h-[160px] will-change-transform"
-            whileHover={reduce ? undefined : { y: -2 }}
+            whileHover={canAnimate ? { y: -2 } : undefined}
           >
             <div className="text-foreground flex-shrink-0" aria-hidden="true">
               {service.icon}

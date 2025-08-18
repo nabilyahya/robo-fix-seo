@@ -1,16 +1,17 @@
 "use client";
 // src/components/ReviewsSection.tsx
+import { useEffect, useState } from "react";
 import { motion, useReducedMotion, type Variants } from "framer-motion";
 import { Star, Quote, ExternalLink } from "lucide-react";
 
 type Review = {
   name: string;
   gender: "male" | "female";
-  avatar?: string; // مثال: "/src/assets/avatars/male-1.jpg"
+  avatar?: string;
   rating: 1 | 2 | 3 | 4 | 5;
   comment: string;
-  date: string; // ISO أو نص
-  link?: string; // رابط التقييم على Google Maps (اختياري)
+  date: string;
+  link?: string;
 };
 
 const containerVariants: Variants = {
@@ -35,17 +36,17 @@ const REVIEWS: Review[] = [
   {
     name: "Ayşe K.",
     gender: "female",
-    avatar: "/src/assets/avatars/female-1.jpg",
+    avatar: "/avatars/female-1.jpg",
     rating: 5,
     comment:
       "Hızlı geri dönüş ve temiz işçilik. Robot süpürgem ilk günkü gibi oldu!",
     date: "2025-07-18",
-    link: "https://maps.google.com/?q=robofix+reviews", // عدّل الرابط
+    link: "https://maps.google.com/?q=robofix+reviews",
   },
   {
     name: "Mehmet A.",
     gender: "male",
-    avatar: "/src/assets/avatars/male-1.jpg",
+    avatar: "/avatars/male-1.jpg",
     rating: 5,
     comment:
       "Şeffaf fiyat, orijinal parça. Aynı gün teslim ettiler, teşekkürler.",
@@ -55,7 +56,7 @@ const REVIEWS: Review[] = [
   {
     name: "Elif T.",
     gender: "female",
-    avatar: "/src/assets/avatars/female-2.jpg",
+    avatar: "/avatars/female-2.jpg",
     rating: 4,
     comment: "Profesyonel yaklaşım. Harita sorununu hızlıca çözdüler.",
     date: "2025-08-09",
@@ -78,7 +79,6 @@ function Stars({ value }: { value: Review["rating"] }) {
               filled ? "text-yellow-400" : "text-muted-foreground/40"
             }`}
             aria-hidden="true"
-            // يجعل نجمة lucide ملوّنة (ممتلئة) عند التفعيل:
             {...(filled ? { fill: "currentColor" } : {})}
           />
         );
@@ -113,8 +113,28 @@ function Avatar({
   );
 }
 
+// hook بسيط: فعل الأنيميشن فقط بعد mount
+function useMounted() {
+  const [mounted, setMounted] = useState(false);
+  useEffect(() => setMounted(true), []);
+  return mounted;
+}
+
 export default function ReviewsSection() {
   const reduce = useReducedMotion();
+  const mounted = useMounted();
+  const canAnimate = mounted && !reduce;
+
+  // مُهيئ ثابت للتاريخ لتفادي اختلاف التوقيت بين SSR والعميل
+  const dtf =
+    typeof Intl !== "undefined"
+      ? new Intl.DateTimeFormat("tr-TR", {
+          year: "numeric",
+          month: "short",
+          day: "2-digit",
+          timeZone: "UTC",
+        })
+      : null;
 
   return (
     <section
@@ -137,15 +157,15 @@ export default function ReviewsSection() {
 
         <motion.div
           className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-3 sm:gap-4 p-0"
-          variants={reduce ? undefined : containerVariants}
-          initial="hidden"
-          whileInView="show"
-          viewport={{ once: true, amount: 0.18 }}
+          variants={canAnimate ? containerVariants : undefined}
+          initial={canAnimate ? "hidden" : false}
+          whileInView={canAnimate ? "show" : undefined}
+          viewport={canAnimate ? { once: true, amount: 0.18 } : undefined}
         >
           {REVIEWS.map((r, idx) => (
             <motion.article
               key={idx}
-              variants={reduce ? undefined : cardVariants}
+              variants={canAnimate ? cardVariants : undefined}
               className="group flex flex-col rounded-lg border border-border bg-card p-4 shadow-card transition-all duration-300 hover:-translate-y-0.5 hover:shadow-lg"
             >
               {/* header */}
@@ -161,11 +181,7 @@ export default function ReviewsSection() {
                 </div>
                 <div className="ml-auto text-[11px] text-muted-foreground">
                   <time dateTime={r.date}>
-                    {new Date(r.date).toLocaleDateString("tr-TR", {
-                      year: "numeric",
-                      month: "short",
-                      day: "2-digit",
-                    })}
+                    {dtf ? dtf.format(new Date(r.date)) : r.date}
                   </time>
                 </div>
               </div>
