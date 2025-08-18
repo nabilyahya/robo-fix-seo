@@ -1,5 +1,5 @@
 import { useMemo, useState } from "react";
-import { Link } from "react-router-dom";
+import Link from "next/link";
 import { motion, type Variants } from "framer-motion";
 import { Clock, Tag, ArrowRight } from "lucide-react";
 import { POSTS } from "@/hooks/posts";
@@ -97,7 +97,7 @@ export default function BlogPage() {
                 className="group overflow-hidden rounded-2xl border bg-card shadow-sm transition-all hover:-translate-y-0.5 hover:shadow-lg"
               >
                 <Link
-                  to={`/blog/${post.slug}`}
+                  href={`/blog/${post.slug}`}
                   aria-label={`${post.title} yazısını aç`}
                 >
                   <div className="relative aspect-[16/10] overflow-hidden">
@@ -140,7 +140,7 @@ export default function BlogPage() {
 
                   <div className="mt-3">
                     <Link
-                      to={`/blog/${post.slug}`}
+                      href={`/blog/${post.slug}`}
                       className="inline-flex items-center gap-1 text-sm font-semibold text-primary hover:underline"
                     >
                       Devamını Oku
