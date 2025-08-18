@@ -1,3 +1,4 @@
+// src/app/blog/[slug]/page.tsx
 import Link from "next/link";
 import Image from "next/image";
 import ReactMarkdown from "react-markdown";
@@ -8,41 +9,94 @@ import type { Metadata } from "next";
 import { getPostBySlug, getAllPostSlugs } from "@/lib/posts";
 import AnimatedCover from "@/components/Blog/AnimatedCover";
 
-type PageProps = { params: { slug: string } };
+const siteUrl = process.env.NEXT_PUBLIC_SITE_URL ?? "http://localhost:3000";
 
+// لو بدك SSG: خليه sync عادي
 export function generateStaticParams() {
   return getAllPostSlugs().map((slug) => ({ slug }));
 }
 
-export function generateMetadata({ params }: PageProps): Metadata {
-  const post = getPostBySlug(params.slug);
-  if (!post) return { title: "Yazı bulunamadı" };
+// ⚠️ مع Next 15/React 19: params هي Promise
+export async function generateMetadata({
+  params,
+}: {
+  params: Promise<{ slug: string }>;
+}): Promise<Metadata> {
+  const { slug } = await params;
+  const post = getPostBySlug(slug);
+  if (!post) return { title: "Yazı bulunamadı", robots: { index: false } };
 
   return {
     title: post.title,
-    description: post.excerpt, // شلنا post.description لأنه مش بالـtype
-    alternates: { canonical: `/blog/${params.slug}` },
+    description: post.excerpt,
+    alternates: { canonical: `/blog/${slug}` },
     openGraph: {
       type: "article",
       title: post.title,
       description: post.excerpt,
       publishedTime: post.date,
       images: post.image ? [post.image] : [],
-      url: `/blog/${params.slug}`,
+      url: `/blog/${slug}`,
     },
+    twitter: { card: "summary_large_image" },
   };
 }
 
-export default function BlogPostPage({ params }: PageProps) {
-  const post = getPostBySlug(params.slug);
+// (اختياري) زمن إعادة التحقق
+export const revalidate = 3600;
+
+export default async function BlogPostPage({
+  params,
+}: {
+  params: Promise<{ slug: string }>;
+}) {
+  const { slug } = await params;
+  const post = getPostBySlug(slug);
   if (!post) notFound();
 
-  const date = new Date(post.date);
+  const dtf = new Intl.DateTimeFormat("tr-TR", {
+    year: "numeric",
+    month: "long",
+    day: "2-digit",
+    timeZone: "UTC",
+  });
+
+  // JSON-LD (Article + Breadcrumb)
+  const articleLd = {
+    "@context": "https://schema.org",
+    "@type": "Article",
+    headline: post.title,
+    description: post.excerpt,
+    datePublished: post.date,
+    dateModified: post.date,
+    image: post.image ? [post.image] : [],
+    author: { "@type": "Organization", name: "RoboFix" },
+    publisher: { "@type": "Organization", name: "RoboFix" },
+    mainEntityOfPage: `${siteUrl}/blog/${slug}`,
+  };
+
+  const breadcrumbLd = {
+    "@context": "https://schema.org",
+    "@type": "BreadcrumbList",
+    itemListElement: [
+      {
+        "@type": "ListItem",
+        position: 1,
+        name: "Blog",
+        item: `${siteUrl}/blog`,
+      },
+      {
+        "@type": "ListItem",
+        position: 2,
+        name: post.title,
+        item: `${siteUrl}/blog/${slug}`,
+      },
+    ],
+  };
 
   return (
     <article className="py-8 sm:py-12 lg:py-16">
       <div className="px-4 max-w-3xl mx-auto">
-        {/* Back */}
         <div className="mb-4">
           <Link
             href="/blog"
@@ -53,19 +107,12 @@ export default function BlogPostPage({ params }: PageProps) {
           </Link>
         </div>
 
-        {/* Header */}
         <header className="mb-4 sm:mb-6">
           <h1 className="text-foreground text-2xl sm:text-3xl md:text-4xl font-black tracking-[-0.02em]">
             {post.title}
           </h1>
           <div className="mt-2 flex items-center gap-2 text-[12px] text-muted-foreground">
-            <time dateTime={post.date}>
-              {date.toLocaleDateString("tr-TR", {
-                year: "numeric",
-                month: "long",
-                day: "2-digit",
-              })}
-            </time>
+            <time dateTime={post.date}>{dtf.format(new Date(post.date))}</time>
             <span>•</span>
             <span className="inline-flex items-center gap-1">
               <Clock className="h-3.5 w-3.5" />
@@ -74,11 +121,22 @@ export default function BlogPostPage({ params }: PageProps) {
           </div>
         </header>
 
-        {/* Cover Image */}
+        {/* JSON-LD */}
+        <script
+          type="application/ld+json"
+          suppressHydrationWarning
+          dangerouslySetInnerHTML={{ __html: JSON.stringify(articleLd) }}
+        />
+        <script
+          type="application/ld+json"
+          suppressHydrationWarning
+          dangerouslySetInnerHTML={{ __html: JSON.stringify(breadcrumbLd) }}
+        />
+
         {post.image && (
           <AnimatedCover className="mb-6 overflow-hidden rounded-xl border bg-card">
             <Image
-              src={post.image} // صور خارجية؟ لازم إعداد next.config.ts
+              src={post.image}
               alt={post.title}
               width={1200}
               height={630}
@@ -88,7 +146,6 @@ export default function BlogPostPage({ params }: PageProps) {
           </AnimatedCover>
         )}
 
-        {/* Content */}
         <div className="prose prose-invert max-w-none prose-headings:font-extrabold prose-p:leading-relaxed prose-a:text-primary hover:prose-a:underline">
           <ReactMarkdown>{post.content}</ReactMarkdown>
         </div>

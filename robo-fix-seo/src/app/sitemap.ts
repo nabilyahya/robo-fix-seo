@@ -2,35 +2,32 @@
 import type { MetadataRoute } from "next";
 import { getAllPosts } from "@/lib/posts";
 
-export const revalidate = 60 * 60 * 24; // يومياً (اختياري)
+// ❗ لازم رقم ثابت (مو 60*60*24)
+export const revalidate = 86400; // يوم واحد
 
 export default function sitemap(): MetadataRoute.Sitemap {
   const base = process.env.NEXT_PUBLIC_SITE_URL ?? "http://localhost:3000";
   const posts = getAllPosts();
+  const now = new Date();
 
-  // عناصر ثابتة
-  const staticEntries: MetadataRoute.Sitemap = [
+  return [
     {
       url: `${base}/`,
-      lastModified: new Date(),
+      lastModified: now,
       changeFrequency: "weekly",
       priority: 1,
     },
     {
       url: `${base}/blog`,
-      lastModified: new Date(),
+      lastModified: now,
       changeFrequency: "weekly",
       priority: 0.8,
     },
+    ...posts.map<MetadataRoute.Sitemap[number]>((p) => ({
+      url: `${base}/blog/${p.slug}`,
+      lastModified: new Date(p.date),
+      changeFrequency: "monthly",
+      priority: 0.7,
+    })),
   ];
-
-  // عناصر التدوينات — نحدد نوع الماب صراحةً
-  const postEntries = posts.map<MetadataRoute.Sitemap[number]>((p) => ({
-    url: `${base}/blog/${p.slug}`,
-    lastModified: new Date(p.date), // ISO من الـArray
-    changeFrequency: "monthly",
-    priority: 0.7,
-  }));
-
-  return [...staticEntries, ...postEntries];
 }
