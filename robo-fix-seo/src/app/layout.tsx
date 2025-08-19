@@ -1,10 +1,21 @@
 // src/app/layout.tsx
 import type { Metadata, Viewport } from "next";
 import { Geist, Geist_Mono } from "next/font/google";
+import Script from "next/script";
 import "./globals.css";
 
-// عدّل الدومين النهائي من بيئة التشغيل
-const siteUrl = process.env.NEXT_PUBLIC_SITE_URL ?? "http://localhost:3000";
+// env.ts (اختياري تحطه بملف منفصل) أو أعلى layout/page/robots
+const ENV = process.env.VERCEL_ENV ?? process.env.NODE_ENV; // 'production' | 'preview' | 'development'
+const VERCEL_URL = process.env.VERCEL_URL; // ex: myapp.vercel.app
+
+export const SITE_URL =
+  process.env.NEXT_PUBLIC_SITE_URL ||
+  (VERCEL_URL ? `https://${VERCEL_URL}` : "http://localhost:3000");
+
+export const GA4_ID = process.env.NEXT_PUBLIC_GA4_ID || ""; // مثال: G-XXXXXXX
+export const GADS_ID = process.env.NEXT_PUBLIC_GOOGLE_ADS_ID || ""; // مثال: AW-XXXXXXXXX
+
+export const IS_PROD = ENV === "production";
 
 const geistSans = Geist({
   variable: "--font-geist-sans",
@@ -18,7 +29,7 @@ const geistMono = Geist_Mono({
 
 export const metadata: Metadata = {
   // مهم لتحويل الروابط/الصور في الميتاداتا إلى مطلقة تلقائياً
-  metadataBase: new URL(siteUrl),
+  metadataBase: new URL(SITE_URL),
 
   // قالب العناوين
   title: {
@@ -41,7 +52,7 @@ export const metadata: Metadata = {
     siteName: "RoboFix",
     locale: "tr_TR",
     url: "/",
-    images: ["/og.png"], // غيّرها إن وجدت صورة OG ثابتة
+    images: ["/og.png"],
   },
 
   // بطاقة تويتر الافتراضية
@@ -92,6 +103,51 @@ export default function RootLayout({
       <body
         className={`${geistSans.variable} ${geistMono.variable} antialiased min-h-dvh bg-background text-foreground`}
       >
+        {/* Google tag (gtag.js) — يعمل لِـ GA4 و/أو Google Ads حسب الـIDs المتوفرة */}
+        {(GA4_ID || GADS_ID) && (
+          <>
+            <Script
+              src={`https://www.googletagmanager.com/gtag/js?id=${
+                GA4_ID || GADS_ID
+              }`}
+              strategy="afterInteractive"
+            />
+            <Script id="gtag-init" strategy="afterInteractive">
+              {`
+                window.dataLayer = window.dataLayer || [];
+                function gtag(){dataLayer.push(arguments);}
+
+                // Consent Mode v2 — افتراضياً مرفوض حتى يوافق المستخدم (تقدر تحدّثه لاحقاً)
+                gtag('consent', 'default', {
+                  ad_storage: 'denied',
+                  ad_user_data: 'denied',
+                  ad_personalization: 'denied',
+                  analytics_storage: 'denied'
+                });
+
+                gtag('js', new Date());
+
+                ${
+                  GA4_ID
+                    ? `gtag('config', '${GA4_ID}', {
+                  anonymize_ip: true,
+                  cookie_flags: 'SameSite=None;Secure'
+                });`
+                    : ""
+                }
+
+                ${GADS_ID ? `gtag('config', '${GADS_ID}');` : ""}
+              `}
+            </Script>
+          </>
+        )}
+
+        {/* ✅ تتبّع صفحات الـSPA (اختياري): 
+            أنشئ الملف src/app/analytics.tsx ثم فعِّل السطرين التاليين */}
+
+        {/* import Analytics from "./analytics";  ← ضِف هذا الاستيراد أعلى الملف عند التفعيل */}
+        {/* <Analytics /> */}
+
         {children}
       </body>
     </html>
