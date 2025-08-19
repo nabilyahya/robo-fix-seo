@@ -11,7 +11,7 @@ import FloatingActions from "@/components/FloatingActions";
 import ReviewsSection from "@/components/ReviewsSection";
 
 // عدّل البيانات التجارية حسب واقع نشاطك
-const BUSINESS_NAME = "RoboFix";
+const BUSINESS_NAME = "Robonarim";
 const CITY = "Bursa";
 const PHONE = "+90-551-166-38-24";
 const HOURS = "Mo-Sa 09:00-19:00";
@@ -40,7 +40,7 @@ export const metadata: Metadata = {
         url: OG_IMAGE,
         width: 1200,
         height: 630,
-        alt: "RoboFix — Bursa robot süpürge servisi",
+        alt: "Robonarim — Bursa robot süpürge servisi",
       },
     ],
   },
