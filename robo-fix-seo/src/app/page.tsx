@@ -15,9 +15,13 @@ const BUSINESS_NAME = "RoboFix";
 const CITY = "Bursa";
 const PHONE = "+90-551-166-38-24";
 const HOURS = "Mo-Sa 09:00-19:00";
-const siteUrl = process.env.NEXT_PUBLIC_SITE_URL ?? "http://localhost:3000";
 
 // ✅ Metadata مخصّصة للهوم (OG/Twitter + canonical)
+const siteUrl =
+  process.env.NEXT_PUBLIC_SITE_URL ?? "https://robo-serfix.vercel.app";
+const OG_IMAGE = `${siteUrl}/og.png`;
+
+// ...
 export const metadata: Metadata = {
   title: `${BUSINESS_NAME} — Robot Süpürge Onarım & Bakım | ${CITY}`,
   description:
@@ -25,20 +29,27 @@ export const metadata: Metadata = {
   alternates: { canonical: "/" },
   openGraph: {
     type: "website",
-    url: "/",
+    url: siteUrl, // ← مطلق
     siteName: BUSINESS_NAME,
     title: `${BUSINESS_NAME} — Robot Süpürge Onarım & Bakım | ${CITY}`,
     description:
       "Robot süpürge onarım, bakım ve yedek parça hizmetleri. Bursa’da hızlı ve güvenilir servis.",
     locale: "tr_TR",
-    images: [{ url: "/og.png", width: 1200, height: 630 }],
+    images: [
+      {
+        url: OG_IMAGE,
+        width: 1200,
+        height: 630,
+        alt: "RoboFix — Bursa robot süpürge servisi",
+      },
+    ],
   },
   twitter: {
     card: "summary_large_image",
     title: `${BUSINESS_NAME} — Robot Süpürge Onarım & Bakım | ${CITY}`,
     description:
       "Robot süpürge onarım, bakım ve yedek parça hizmetleri. Bursa’da hızlı ve güvenilir servis.",
-    images: ["/og.png"],
+    images: [OG_IMAGE], // ← مطلق
   },
 };
 
