@@ -22,7 +22,7 @@ export default function OG() {
           fontWeight: 800,
         }}
       >
-        RoboFix Blog
+        Robonarim Blog
       </div>
     ),
     size

@@ -70,8 +70,8 @@ export default async function BlogPostPage({
     datePublished: post.date,
     dateModified: post.date,
     image: post.image ? [post.image] : [],
-    author: { "@type": "Organization", name: "RoboFix" },
-    publisher: { "@type": "Organization", name: "RoboFix" },
+    author: { "@type": "Organization", name: "Robonarim" },
+    publisher: { "@type": "Organization", name: "Robonarim" },
     mainEntityOfPage: `${siteUrl}/blog/${slug}`,
   };
 

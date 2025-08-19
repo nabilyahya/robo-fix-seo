@@ -17,13 +17,13 @@ const Header = () => {
   return (
     <header className="flex items-center justify-between whitespace-nowrap border-b border-border px-4 sm:px-6 lg:px-10 py-3 bg-background relative">
       {/* Logo */}
-      <Link href="/" aria-label="RoboFix - Ana Sayfa">
+      <Link href="/" aria-label="Robonarim - Ana Sayfa">
         <div className="flex items-center gap-3 sm:gap-4 text-foreground">
           <div className="size-6 sm:size-8 text-primary">
             <Wrench className="h-6 w-6 sm:h-8 sm:w-8" />
           </div>
           <h2 className="text-foreground text-base sm:text-lg font-bold leading-tight tracking-[-0.015em]">
-            RoboFix
+            Robonarim
           </h2>
         </div>
       </Link>

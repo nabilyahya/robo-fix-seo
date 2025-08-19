@@ -72,7 +72,7 @@ const Footer = () => {
 
           {/* Copyright */}
           <p className="text-muted-foreground text-xs sm:text-sm lg:text-base font-normal leading-normal">
-            © {currentYear} RoboFix. Tüm hakları saklıdır.
+            © {currentYear} Robonarim. Tüm hakları saklıdır.
           </p>
         </div>
       </div>

@@ -51,7 +51,7 @@ export default function BlogPage() {
   const blogLd = {
     "@context": "https://schema.org",
     "@type": "Blog",
-    name: "RoboFix Blog",
+    name: "Robonarim Blog",
     url: `${siteUrl}/blog`,
     inLanguage: "tr-TR",
     description:

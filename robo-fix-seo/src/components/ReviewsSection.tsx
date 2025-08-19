@@ -41,7 +41,7 @@ const REVIEWS: Review[] = [
     comment:
       "Hızlı geri dönüş ve temiz işçilik. Robot süpürgem ilk günkü gibi oldu!",
     date: "2025-07-18",
-    link: "https://maps.google.com/?q=robofix+reviews",
+    link: "https://maps.google.com/?q=Robonarim+reviews",
   },
   {
     name: "Mehmet A.",
@@ -51,7 +51,7 @@ const REVIEWS: Review[] = [
     comment:
       "Şeffaf fiyat, orijinal parça. Aynı gün teslim ettiler, teşekkürler.",
     date: "2025-08-02",
-    link: "https://maps.google.com/?q=robofix+reviews",
+    link: "https://maps.google.com/?q=Robonarim+reviews",
   },
   {
     name: "Elif T.",
@@ -60,7 +60,7 @@ const REVIEWS: Review[] = [
     rating: 4,
     comment: "Profesyonel yaklaşım. Harita sorununu hızlıca çözdüler.",
     date: "2025-08-09",
-    link: "https://maps.google.com/?q=robofix+reviews",
+    link: "https://maps.google.com/?q=Robonarim+reviews",
   },
 ];
 

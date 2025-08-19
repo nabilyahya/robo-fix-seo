@@ -23,8 +23,8 @@ export const metadata: Metadata = {
 
   // قالب العناوين
   title: {
-    default: "RoboFix",
-    template: "%s | RoboFix",
+    default: "Robonarim",
+    template: "%s | Robonarim",
   },
 
   // وصف عام للموقع
@@ -39,7 +39,7 @@ export const metadata: Metadata = {
   // Open Graph الافتراضي
   openGraph: {
     type: "website",
-    siteName: "RoboFix",
+    siteName: "Robonarim",
     locale: "tr_TR",
     url: "/",
     images: ["/og.png"],
@@ -48,7 +48,7 @@ export const metadata: Metadata = {
   // بطاقة تويتر الافتراضية
   twitter: {
     card: "summary_large_image",
-    title: "RoboFix",
+    title: "Robonarim",
     description:
       "Robot süpürge onarım, bakım ve seçim rehberleri. Uzman ipuçlarıyla daha verimli temizlik.",
     images: ["/og.png"],
