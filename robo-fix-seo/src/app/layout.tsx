@@ -5,6 +5,7 @@ import Analytics from "./analytics";
 import "./globals.css";
 
 import { SITE_URL, GA4_ID, GADS_ID } from "@/lib/site";
+import { Suspense } from "react";
 
 const geistSans = Geist({
   variable: "--font-geist-sans",
@@ -133,7 +134,9 @@ export default function RootLayout({
         )}
 
         {/* تتبّع تنقّلات الـSPA */}
-        <Analytics />
+        <Suspense fallback={null}>
+          <Analytics />
+        </Suspense>
 
         {children}
       </body>
