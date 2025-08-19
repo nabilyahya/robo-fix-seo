@@ -1,21 +1,10 @@
-// src/app/layout.tsx
-import Analytics from "./analytics";
 import type { Metadata, Viewport } from "next";
 import { Geist, Geist_Mono } from "next/font/google";
 import Script from "next/script";
+import Analytics from "./analytics";
 import "./globals.css";
-// env.ts (اختياري تحطه بملف منفصل) أو أعلى layout/page/robots
-const ENV = process.env.VERCEL_ENV ?? process.env.NODE_ENV; // 'production' | 'preview' | 'development'
-const VERCEL_URL = process.env.VERCEL_URL; // ex: myapp.vercel.app
 
-export const SITE_URL =
-  process.env.NEXT_PUBLIC_SITE_URL ||
-  (VERCEL_URL ? `https://${VERCEL_URL}` : "http://localhost:3000");
-
-export const GA4_ID = process.env.NEXT_PUBLIC_GA4_ID || ""; // مثال: G-XXXXXXX
-export const GADS_ID = process.env.NEXT_PUBLIC_GOOGLE_ADS_ID || ""; // مثال: AW-XXXXXXXXX
-
-export const IS_PROD = ENV === "production";
+import { SITE_URL, GA4_ID, GADS_ID } from "@/lib/site";
 
 const geistSans = Geist({
   variable: "--font-geist-sans",
@@ -46,7 +35,7 @@ export const metadata: Metadata = {
     canonical: "/",
   },
 
-  // Open Graph الافتراضي (يتجاوز في الصفحات الديناميكية عبر generateMetadata)
+  // Open Graph الافتراضي
   openGraph: {
     type: "website",
     siteName: "RoboFix",
@@ -130,10 +119,10 @@ export default function RootLayout({
                 ${
                   GA4_ID
                     ? `gtag('config', '${GA4_ID}', {
-                  anonymize_ip: true,
-                  cookie_flags: 'SameSite=None;Secure',
-                   send_page_view: false
-                });`
+                        anonymize_ip: true,
+                        cookie_flags: 'SameSite=None;Secure',
+                        send_page_view: false
+                      });`
                     : ""
                 }
 
@@ -143,12 +132,9 @@ export default function RootLayout({
           </>
         )}
 
-        {/* ✅ تتبّع صفحات الـSPA (اختياري): 
-            أنشئ الملف src/app/analytics.tsx ثم فعِّل السطرين التاليين */}
-
-        {/* import Analytics from "./analytics";  ← ضِف هذا الاستيراد أعلى الملف عند التفعيل */}
-        {/* <Analytics /> */}
+        {/* تتبّع تنقّلات الـSPA */}
         <Analytics />
+
         {children}
       </body>
     </html>
