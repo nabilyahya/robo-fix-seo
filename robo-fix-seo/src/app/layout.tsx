@@ -1,43 +1,46 @@
+// src/app/layout.tsx
 import type { Metadata, Viewport } from "next";
-import ConsentBanner from "@/components/ConsentBanner";
-import { Geist, Geist_Mono } from "next/font/google";
+import { Suspense } from "react";
 import Script from "next/script";
-import Analytics from "./analytics";
+import { Geist, Geist_Mono } from "next/font/google";
+
 import "./globals.css";
 
+import Analytics from "./analytics";
+import ConsentBanner from "@/components/ConsentBanner";
 import { SITE_URL, GA4_ID, GADS_ID } from "@/lib/site";
-import { Suspense } from "react";
 
+// ========= Fonts (swap + no preload يخفّض تأثيرها على LCP) =========
 const geistSans = Geist({
   variable: "--font-geist-sans",
   subsets: ["latin"],
+  display: "swap",
+  preload: false,
 });
 
 const geistMono = Geist_Mono({
   variable: "--font-geist-mono",
   subsets: ["latin"],
+  display: "swap",
+  preload: false,
 });
 
+// ========= Metadata =========
 export const metadata: Metadata = {
-  // مهم لتحويل الروابط/الصور في الميتاداتا إلى مطلقة تلقائياً
   metadataBase: new URL(SITE_URL),
 
-  // قالب العناوين
   title: {
     default: "Robonarim",
     template: "%s | Robonarim",
   },
 
-  // وصف عام للموقع
   description:
-    "Robot süpürge onarım, bakım ve rehberler. Bursa ve çevresinde hızlı, şeffaf ve garantili servis.",
+    "Robot süpürge onarım, bakım ve rehberler. Bursa ve çevresinde hızlı, şeffاف ve garantili servis.",
 
-  // روابط بديلة (canonical للصفحة الرئيسية)
   alternates: {
     canonical: "/",
   },
 
-  // Open Graph الافتراضي
   openGraph: {
     type: "website",
     siteName: "Robonarim",
@@ -46,7 +49,6 @@ export const metadata: Metadata = {
     images: ["/og.png"],
   },
 
-  // بطاقة تويتر الافتراضية
   twitter: {
     card: "summary_large_image",
     title: "Robonarim",
@@ -55,7 +57,6 @@ export const metadata: Metadata = {
     images: ["/og.png"],
   },
 
-  // إعدادات Robots افتراضية
   robots: {
     index: true,
     follow: true,
@@ -68,7 +69,6 @@ export const metadata: Metadata = {
     },
   },
 
-  // أيقونات (عدّل حسب ملفاتك في /public)
   icons: {
     icon: [{ url: "/favicon.ico" }],
     apple: [{ url: "/apple-touch-icon.png" }],
@@ -76,7 +76,7 @@ export const metadata: Metadata = {
   },
 };
 
-// اختيارية لكن مفيدة للـPWA/الألوان
+// ========= Viewport / PWA-ish bits =========
 export const viewport: Viewport = {
   themeColor: [
     { media: "(prefers-color-scheme: light)", color: "#ffffff" },
@@ -86,6 +86,7 @@ export const viewport: Viewport = {
   initialScale: 1,
 };
 
+// ========= Root Layout =========
 export default function RootLayout({
   children,
 }: Readonly<{ children: React.ReactNode }>) {
@@ -94,7 +95,7 @@ export default function RootLayout({
       <body
         className={`${geistSans.variable} ${geistMono.variable} antialiased min-h-dvh bg-background text-foreground`}
       >
-        {/* Google tag (gtag.js) — يعمل لِـ GA4 و/أو Google Ads حسب الـIDs المتوفرة */}
+        {/* Google tag (gtag.js) — يعمل لِـ GA4 و/أو Google Ads حسب المتوفر */}
         {(GA4_ID || GADS_ID) && (
           <>
             <Script
@@ -108,7 +109,7 @@ export default function RootLayout({
                 window.dataLayer = window.dataLayer || [];
                 function gtag(){dataLayer.push(arguments);}
 
-                // Consent Mode v2 — افتراضياً مرفوض حتى يوافق المستخدم (تقدر تحدّثه لاحقاً)
+                // Consent Mode v2 — افتراضياً مرفوض حتى يوافق المستخدم
                 gtag('consent', 'default', {
                   ad_storage: 'denied',
                   ad_user_data: 'denied',
@@ -134,10 +135,12 @@ export default function RootLayout({
           </>
         )}
 
-        {/* تتبّع تنقّلات الـSPA */}
+        {/* تتبع تنقلات SPA بعد الموافقة على الخصوصية */}
         <Suspense fallback={null}>
           <Analytics />
         </Suspense>
+
+        {/* بانر الموافقة على الكوكيز/الخصوصية */}
         <Suspense fallback={null}>
           <ConsentBanner />
         </Suspense>
