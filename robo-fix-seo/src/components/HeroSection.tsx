@@ -8,16 +8,8 @@ import {
   useMotionValue,
   useTransform,
 } from "framer-motion";
+import Image from "next/image";
 import { useEffect } from "react";
-
-/**
- * Creative, animated hero section (TR content)
- * - Parallax tilt on mouse move
- * - Subtle background zoom (Ken Burns)
- * - Floating badges
- * - Call button with pulse & hover lift
- * - Accessible & responsive
- */
 
 export default function HeroSection() {
   // Mouse parallax for foreground group
@@ -34,6 +26,12 @@ export default function HeroSection() {
   const glow = useMotionTemplate`radial-gradient(60% 60% at ${glowX} ${glowY}, rgba(255,255,255,0.10), transparent 60%)`;
 
   useEffect(() => {
+    // احترم تفضيل تقليل الحركة
+    const prefersReduced =
+      typeof window !== "undefined" &&
+      window.matchMedia("(prefers-reduced-motion: reduce)").matches;
+    if (prefersReduced) return;
+
     const handle = (e: MouseEvent) => {
       const { innerWidth, innerHeight } = window;
       const x = (e.clientX / innerWidth) * 100 - 50; // -50 -> 50
@@ -58,11 +56,23 @@ export default function HeroSection() {
           animate={{ scale: 1.01, opacity: 1 }}
           transition={{ duration: 0.9, ease: "easeOut" }}
         >
-          {/* Background image with dark gradient overlay + zoom animation */}
+          {/* ✅ صورة الهيرو باستخدام next/image بدلاً من خلفية CSS */}
+          <div className="absolute inset-0 -z-10">
+            <Image
+              src="/hero-bg.jpg" // أو استوردها: import hero from "@/public/hero-bg.jpg"
+              alt="" // زخرفية فقط
+              priority // مهم: يجعلها High Priority/LCP
+              fill // تغطية الحاوية
+              sizes="100vw" // هذه الصورة بعرض الشاشة
+              className="object-cover object-center"
+              placeholder="empty" // أو "blur" لو استوردتها ثابتًا
+            />
+          </div>
+
+          {/* Ken Burns (اختياري، خفيف) */}
           <motion.div
             aria-hidden
-            className="absolute inset-0 bg-cover bg-center"
-            style={{ backgroundImage: `url('/hero-bg.jpg')` }}
+            className="absolute inset-0 -z-10"
             initial={{ scale: 1.04 }}
             animate={{ scale: 1.08 }}
             transition={{
@@ -72,18 +82,21 @@ export default function HeroSection() {
               repeatType: "mirror",
             }}
           />
+
+          {/* تظليل فوق الصورة */}
           <div className="absolute inset-0 bg-gradient-to-b from-black/30 via-black/45 to-black/60" />
-          {/* Cursor glow */}
+
+          {/* توهج يتبع المؤشر */}
           <motion.div
             aria-hidden
             className="absolute inset-0"
             style={{ backgroundImage: glow }}
           />
 
-          {/* Content */}
+          {/* المحتوى */}
           <motion.div
             style={{ rotateX, rotateY }}
-            className="relative z-10 flex min-h-[300px] sm:min-h:[420px] lg:min-h-[520px] items-center justify-center p-4 sm:p-8"
+            className="relative z-10 flex min-h-[300px] sm:min-h-[420px] lg:min-h-[520px] items-center justify-center p-4 sm:p-8"
           >
             <motion.div
               style={{ x: translateX, y: translateY }}
@@ -108,7 +121,6 @@ export default function HeroSection() {
                 Hızlı servis. Yüksek kalite. Uygun fiyat.
               </motion.p>
 
-              {/* Floating badges */}
               <div className="relative">
                 <div className="flex flex-wrap items-center justify-center gap-2 sm:gap-3">
                   {[
@@ -133,7 +145,6 @@ export default function HeroSection() {
                 </div>
               </div>
 
-              {/* Call CTA */}
               <motion.div
                 initial={{ scale: 0.98, opacity: 0 }}
                 animate={{ scale: 1, opacity: 1 }}
@@ -157,7 +168,6 @@ export default function HeroSection() {
                         • Hemen Ara
                       </span>
                     </span>
-                    {/* Pulse ring */}
                     <span
                       aria-hidden
                       className="pointer-events-none absolute -z-0 inset-0 rounded-xl"
@@ -168,7 +178,6 @@ export default function HeroSection() {
                 </Button>
               </motion.div>
 
-              {/* Trust microcopy */}
               <motion.p
                 initial={{ opacity: 0 }}
                 animate={{ opacity: 1 }}
@@ -180,7 +189,7 @@ export default function HeroSection() {
             </motion.div>
           </motion.div>
 
-          {/* Soft top/bottom gradient edges for depth */}
+          {/* حواف ظل ناعمة */}
           <div className="pointer-events-none absolute inset-x-0 top-0 h-24 bg-gradient-to-b from-black/50 via-transparent to-transparent" />
           <div className="pointer-events-none absolute inset-x-0 bottom-0 h-24 bg-gradient-to-t from-black/50 via-transparent to-transparent" />
         </motion.div>
