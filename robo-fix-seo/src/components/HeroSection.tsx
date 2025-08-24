@@ -156,14 +156,14 @@ export default function HeroSection() {
                   className="group relative h-11 sm:h-12 px-5 sm:px-7 font-bold text-base sm:text-lg rounded-xl shadow-lg shadow-black/25 hover:shadow-black/30"
                   aria-label="Robot süpürge tamiri için hemen arayın"
                 >
-                  <a href="tel:+905511663824">
+                  <a href="tel:+905515222067">
                     <span
                       className="absolute -inset-px rounded-xl bg-white/10 opacity-0 group-hover:opacity-100 transition"
                       aria-hidden
                     />
                     <span className="relative z-10 inline-flex items-center gap-2">
                       <Phone className="h-5 w-5" aria-hidden />
-                      <span className="truncate">+90 551 166 38 24</span>
+                      <span className="truncate">+90 551 522 20 67</span>
                       <span className="hidden sm:inline-block text-white/80 font-semibold">
                         • Hemen Ara
                       </span>

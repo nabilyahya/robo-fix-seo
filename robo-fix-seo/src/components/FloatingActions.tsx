@@ -6,8 +6,9 @@ import { Mail, MapPin, Instagram as IgIcon, MessageSquare } from "lucide-react";
 import { FaWhatsapp } from "react-icons/fa";
 
 const MAPS_URL = "https://maps.google.com/?q=Your+Address";
-const INSTAGRAM_URL = "https://instagram.com/your_account";
-const WHATSAPP_PHONE_E164 = "905511663824";
+const INSTAGRAM_URL =
+  "https://www.instagram.com/robonarim/?utm_source=ig_web_button_share_sheet";
+const WHATSAPP_PHONE_E164 = "+905515222067";
 
 export default function FloatingActions() {
   const [open, setOpen] = useState(false);

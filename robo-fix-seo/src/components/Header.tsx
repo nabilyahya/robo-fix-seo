@@ -70,7 +70,7 @@ const Header = () => {
           className="min-w-[110px] max-w-[480px] text-xs sm:text-sm bg-green-500 hover:bg-green-600"
         >
           <a
-            href="https://wa.me/905511663824"
+            href="https://wa.me/+905515222067"
             target="_blank"
             rel="noopener noreferrer"
             aria-label="WhatsApp ile iletişime geç"
@@ -91,7 +91,7 @@ const Header = () => {
           className="text-xs px-3 bg-green-500 hover:bg-green-600"
         >
           <a
-            href="https://wa.me/905511663824"
+            href="https://wa.me/+905515222067"
             target="_blank"
             rel="noopener noreferrer"
             className="flex items-center gap-1"

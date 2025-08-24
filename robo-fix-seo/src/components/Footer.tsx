@@ -21,7 +21,7 @@ const Footer = () => {
       ariaLabel: "Bizi Facebook'ta takip edin",
     },
     {
-      href: "#",
+      href: "https://www.instagram.com/robonarim/?utm_source=ig_web_button_share_sheet",
       icon: <Instagram className="h-6 w-6" />,
       label: "Instagram",
       ariaLabel: "Bizi Instagram'da takip edin",

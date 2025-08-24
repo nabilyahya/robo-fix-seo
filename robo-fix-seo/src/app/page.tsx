@@ -13,23 +13,27 @@ import ReviewsSection from "@/components/ReviewsSection";
 // عدّل البيانات التجارية حسب واقع نشاطك
 const BUSINESS_NAME = "Robonarim";
 const CITY = "Bursa";
-const PHONE = "+90-551-166-38-24";
+const PHONE = "+90-551-522-20-67";
 const HOURS = "Mo-Sa 09:00-19:00";
 
 // ✅ Metadata مخصّصة للهوم (OG/Twitter + canonical)
-const siteUrl =
-  process.env.NEXT_PUBLIC_SITE_URL ?? "https://robo-serfix.vercel.app";
-const OG_IMAGE = `${siteUrl}/og.png`;
+const VERCEL_URL = process.env.VERCEL_URL;
+const SITE_URL = process.env.NEXT_PUBLIC_SITE_URL
+  ? process.env.NEXT_PUBLIC_SITE_URL
+  : VERCEL_URL
+  ? `https://${VERCEL_URL}`
+  : "http://localhost:3000";
+const OG_IMAGE = `${SITE_URL}/og.png`;
 
 // ...
 export const metadata: Metadata = {
   title: `${BUSINESS_NAME} — Robot Süpürge Onarım & Bakım | ${CITY}`,
   description:
-    "Robot süpürge onarım, bakım ve yedek parça hizmetleri. Hızlı teşhis, orijinal parça ve şeffaf fiyatlar. Bursa içi aynı gün destek.",
+    "Robot süpürge onarım, bakım ve yedek parça hizmetleri. Hızlı teşhis, orijinal parça ve şeffaf fiyatlar. Bursa içi aynı gün destek. Telefon: +90 551 522 20 67",
   alternates: { canonical: "/" },
   openGraph: {
     type: "website",
-    url: siteUrl, // ← مطلق
+    url: SITE_URL, // ← مطلق
     siteName: BUSINESS_NAME,
     title: `${BUSINESS_NAME} — Robot Süpürge Onarım & Bakım | ${CITY}`,
     description:
@@ -62,8 +66,8 @@ export default function Index() {
     "@context": "https://schema.org",
     "@type": "LocalBusiness",
     name: BUSINESS_NAME,
-    url: siteUrl,
-    image: [`${siteUrl}/og.png`],
+    url: SITE_URL,
+    image: [`${SITE_URL}/og.png`],
     description:
       "Robot süpürge onarım ve bakım hizmetleri. Hızlı teşhis, orijinal parça, şeffaf fiyat.",
     telephone: PHONE,
@@ -75,6 +79,7 @@ export default function Index() {
     areaServed: CITY,
     openingHours: HOURS,
     sameAs: [
+      "https://www.instagram.com/robonarim/?utm_source=ig_web_button_share_sheet",
       // أضف روابط السوشيال إن وُجدت
       // "https://maps.google.com/....",
       // "https://www.instagram.com/...."
@@ -86,10 +91,10 @@ export default function Index() {
     "@context": "https://schema.org",
     "@type": "WebSite",
     name: BUSINESS_NAME,
-    url: siteUrl,
+    url: SITE_URL,
     potentialAction: {
       "@type": "SearchAction",
-      target: `${siteUrl}/blog?query={search_term_string}`,
+      target: `${SITE_URL}/blog?query={search_term_string}`,
       "query-input": "required name=search_term_string",
     },
   };
