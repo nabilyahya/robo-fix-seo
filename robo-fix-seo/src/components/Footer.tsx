@@ -15,7 +15,7 @@ const Footer = () => {
 
   const socialLinks = [
     {
-      href: "#",
+      href: "https://www.facebook.com/profile.php?id=61579740275799 ",
       icon: <Facebook className="h-6 w-6" />,
       label: "Facebook",
       ariaLabel: "Bizi Facebook'ta takip edin",

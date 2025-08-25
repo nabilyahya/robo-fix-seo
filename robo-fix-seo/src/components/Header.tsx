@@ -6,7 +6,8 @@ import { Button } from "@/components/ui/button";
 import { Wrench, Menu, X } from "lucide-react";
 import { useState } from "react";
 import { FaWhatsapp } from "react-icons/fa";
-
+import logo from "../../public/logo2.png";
+import Image from "next/image";
 const Header = () => {
   const [isMobileMenuOpen, setIsMobileMenuOpen] = useState(false);
 
@@ -19,12 +20,13 @@ const Header = () => {
       {/* Logo */}
       <Link href="/" aria-label="Robonarim - Ana Sayfa">
         <div className="flex items-center gap-3 sm:gap-4 text-foreground">
-          <div className="size-6 sm:size-8 text-primary">
-            <Wrench className="h-6 w-6 sm:h-8 sm:w-8" />
-          </div>
-          <h2 className="text-foreground text-base sm:text-lg font-bold leading-tight tracking-[-0.015em]">
-            Robonarim
-          </h2>
+          <Image
+            src={logo}
+            alt="Robonarim logo"
+            width={100}
+            height={40}
+            priority
+          />
         </div>
       </Link>
 

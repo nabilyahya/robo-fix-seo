@@ -67,9 +67,9 @@ export default function Index() {
     "@type": "LocalBusiness",
     name: BUSINESS_NAME,
     url: SITE_URL,
-    image: [`${SITE_URL}/og.png`],
+    image: [`${SITE_URL}/logo2.png`],
     description:
-      "Robot süpürge onarım ve bakım hizmetleri. Hızlı teşhis, orijinal parça, şeffaf fiyat.",
+      "Robot süpürge onarım ve bakım hizmetleri. Hızlı teşhis, orijinal parça, şeffaf fiyat +90 551 552 20 67.",
     telephone: PHONE,
     address: {
       "@type": "PostalAddress",
