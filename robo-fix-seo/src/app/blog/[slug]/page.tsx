@@ -163,7 +163,6 @@ const mdComponents: MDComponents = {
       children?: React.ReactNode;
     } & React.HTMLAttributes<HTMLElement>;
 
-    // @ts-expect-error — inline يُحقن وقت التشغيل من react-markdown
     const inline: boolean | undefined = (props as any).inline;
 
     if (inline) {
