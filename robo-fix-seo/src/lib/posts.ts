@@ -7,6 +7,7 @@ export type Post = {
   read: string; // "4 dk" مثلاً
   tag: string; // التصنيف
   content: string; // Markdown مسموح
+  keywords?: string[]; // كلمات مفتاحية لتمييزها بالـ Bold تلقائياً
 };
 
 export const POSTS: Post[] = [
@@ -73,6 +74,49 @@ Düzelmezse **servise başvurun**; motor veya sensör bakımı gerekebilir.
     tag: "Karşılaştırma",
     content: `
 **Xiaomi** genelde fiyat/performans, **Dreame** ise yeni nesil mop ve sensörlerde öne çıkar.
+`,
+  },
+  {
+    slug: "robot-supurge-sarj-istasyonuna-donmuyor",
+    title: "Robot Süpürge Şarj İstasyonuna Dönmüyor mu? Nedenleri ve Çözümler",
+    excerpt:
+      "Robot süpürgeniz şarj istasyonuna dönmüyorsa sensör, yazılım veya konumlandırma sorunları olabilir. İşte çözüm yolları.",
+    image:
+      "/blog/Robot Süpürge Şarj İstasyonuna Dönmüyor mu Nedenleri ve Çözümler.png",
+    date: "2025-09-01",
+    read: "5 dk",
+    tag: "Sorun Giderme",
+    keywords: [
+      "robot süpürge şarj istasyonuna dönmüyor",
+      "robot süpürge hata",
+      "şarj sensörü sorunu",
+      "robot süpürge bakım",
+      "Bursa robot süpürge servisi",
+    ],
+    content: `
+### Robot Süpürge Şarj İstasyonuna Dönmüyor mu?
+
+Evde sıkça karşılaşılan bir sorun: robot süpürge şarj istasyonuna dönmüyor. Bu durum hem temizlik rutininizi bozabilir hem de cihazın ömrünü kısaltabilir.
+
+#### Olası Nedenler
+1. **Şarj sensörü sorunu**: Sensörler toz veya kirle kaplanmış olabilir. Mikrofiber bez ile dikkatlice temizleyin.
+2. **Robot süpürge hata kodu**: Bazı modeller ekranda veya uygulamada hata mesajı verir. Kullanım kılavuzunu kontrol edin.
+3. **Konumlandırma problemi**: Şarj istasyonu dar bir köşeye yerleştirilmişse cihaz sinyali algılamayabilir.
+4. **Yazılım güncellemesi eksikliği**: Uygulama üzerinden firmware güncellemelerini kontrol edin.
+
+#### Çözüm Adımları
+- Öncelikle şarj istasyonunu **düz, açık bir alana** yerleştirin.  
+- **Sensör temizliği** yaparak cihazın yolunu bulmasına yardımcı olun.  
+- Eğer sorun devam ederse yazılımı güncelleyin.  
+- **Robot süpürge bakım** işlemlerini düzenli olarak yapmayı unutmayın.
+
+#### Ne Zaman Servise Başvurmalı?
+Tüm bu adımlara rağmen robot süpürge şarj istasyonuna dönmüyor ise donanımsal bir problem olabilir. Özellikle sensör veya anakart kaynaklı arızalarda profesyonel destek gerekir. Bursa’da güvenilir bir çözüm için bizimle iletişime geçebilirsiniz:  
+📞 **0551 522 2067**
+
+---
+
+> Not: **Bursa robot süpürge servisi** olarak, tüm marka ve modellerde hızlı ve garantili hizmet sunuyoruz.
 `,
   },
 ];

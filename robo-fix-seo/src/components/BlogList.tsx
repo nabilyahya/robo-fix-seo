@@ -2,7 +2,7 @@ import { useMemo, useState } from "react";
 import Link from "next/link";
 import { motion, type Variants } from "framer-motion";
 import { Clock, Tag, ArrowRight } from "lucide-react";
-import { POSTS } from "@/hooks/posts";
+import { POSTS } from "@/lib/posts";
 import Header from "./Header";
 
 const TAGS = ["Tümü", ...Array.from(new Set(POSTS.map((p) => p.tag)))];
