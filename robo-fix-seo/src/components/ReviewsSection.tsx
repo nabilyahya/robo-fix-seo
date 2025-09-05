@@ -34,33 +34,33 @@ const cardVariants: Variants = {
 
 const REVIEWS: Review[] = [
   {
-    name: "Ayşe K.",
+    name: "Asmaa art",
     gender: "female",
     avatar: "/avatars/female-1.jpg",
     rating: 5,
     comment:
-      "Hızlı geri dönüş ve temiz işçilik. Robot süpürgem ilk günkü gibi oldu!",
+      "Çok ilgili ve naziklerdi. Arıza tespiti ve teslimat ücretsiz, tavsiye ederim!",
     date: "2025-07-18",
     link: "https://maps.google.com/?q=Robonarim+reviews",
   },
   {
-    name: "Mehmet A.",
+    name: "Nabil yahya",
     gender: "male",
     avatar: "/avatars/male-1.jpg",
     rating: 5,
     comment:
-      "Şeffaf fiyat, orijinal parça. Aynı gün teslim ettiler, teşekkürler.",
+      "Tepkileri çok hızlı! Ve çok yardımlar Çalıştığım en iyi yerlerden biri",
     date: "2025-08-02",
-    link: "https://maps.google.com/?q=Robonarim+reviews",
+    link: "https://share.google/Br3wXIn5VWXZT6JXt",
   },
   {
-    name: "Elif T.",
+    name: "Ahmet Can",
     gender: "female",
     avatar: "/avatars/female-2.jpg",
     rating: 4,
     comment: "Profesyonel yaklaşım. Harita sorununu hızlıca çözdüler.",
     date: "2025-08-09",
-    link: "https://maps.google.com/?q=Robonarim+reviews",
+    link: "https://share.google/Br3wXIn5VWXZT6JXt",
   },
 ];
 

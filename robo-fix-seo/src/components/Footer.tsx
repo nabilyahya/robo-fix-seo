@@ -8,8 +8,7 @@ const Footer = () => {
     { href: "#services", label: "Hizmetler" },
     { href: "#about", label: "Hakkımızda" },
     // { href: "#contact", label: "İletişim" },
-    { href: "/privacy", label: "Gizlilik Politikası" },
-    { href: "/terms", label: "Hizmet Şartları" },
+
     { href: "/blog", label: "blog" },
   ];
 

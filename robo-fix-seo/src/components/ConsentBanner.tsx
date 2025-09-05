@@ -128,14 +128,7 @@ export default function ConsentBanner() {
             <p className="mt-1 text-xs leading-relaxed text-muted-foreground sm:text-sm">
               Bu site deneyiminizi geliştirmek için çerezler kullanır.
               İstatistik (analitik) ve reklam çerezlerini kabul etmek isterseniz
-              aşağıdan yönetebilirsiniz.{" "}
-              <a
-                href="/kvkk" // ← سياسة الخصوصية/‏KVKK (بدّل الرابط)
-                className="font-semibold text-primary underline-offset-2 hover:underline"
-              >
-                Gizlilik Politikası
-              </a>
-              .
+              aşağıdan yönetebilirsiniz. .
             </p>
           </div>
 
