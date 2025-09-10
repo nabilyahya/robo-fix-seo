@@ -343,7 +343,12 @@ export default async function IletisimPage({
               addressCountry: "TR",
             },
             makesOffer: [{ "@type": "Offer", name: "Ücretsiz arıza tespiti" }],
-            serviceType: "Robot süpürge tamiri",
+            serviceType: [
+              "Robot süpürge tamiri",
+              "Robot süpürge servisi",
+              "Robot süpürge bakım",
+              "Robot süpürge yazılım güncelleme",
+            ],
           })}
         </Script>
 

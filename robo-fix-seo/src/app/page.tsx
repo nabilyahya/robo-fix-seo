@@ -9,6 +9,8 @@ import Footer from "@/components/Footer";
 import BrandsSection from "@/components/BrandsSection";
 import FloatingActions from "@/components/FloatingActions";
 import ReviewsSection from "@/components/ReviewsSection";
+import FaqSection from "@/components/FaqSection";
+import OurServiss from "@/components/ourService";
 
 // عدّل البيانات التجارية حسب واقع نشاطك
 const BUSINESS_NAME = "Robonarim";
@@ -31,6 +33,53 @@ export const metadata: Metadata = {
   description:
     "Robot süpürge onarım, bakım ve yedek parça hizmetleri. Hızlı teşhis, orijinal parça ve şeffaf fiyatlar. Bursa içi aynı gün destek. Telefon: +90 551 522 20 67",
   alternates: { canonical: "/" },
+  keywords: [
+    "robot süpürge tamiri",
+    "robot süpürge servisi",
+    "robot süpürge sensör arızası",
+    "robot süpürge yedek parça",
+    "robot süpürge bakım",
+    "robot süpürge batarya değişimi",
+    "robot süpürge tamircisi",
+    "robot süpürge motor arızası",
+    "robot süpürge filtre değişimi",
+    "robot süpürge arıza servisi",
+    "robot süpürge tamir merkezi",
+    "robot süpürge tamir fiyatları",
+    "robot süpürge açılmıyor",
+    "robot süpürge hata veriyor",
+    "robot süpürge hata kodu",
+    "robot süpürge batarya arızası",
+    "robot süpürge fırça arızası",
+    "robot süpürge şarj istasyonu tamiri",
+    "robot süpürge adaptör tamiri",
+    "robot süpürge anakart tamiri",
+    "robot süpürge yazılım hatası",
+    "robot süpürge Bursa tamir",
+    "robot süpürge Nilüfer tamir",
+    "robot süpürge Görükle tamir",
+    "robot süpürge Yıldırım tamir",
+    "robot süpürge FSM Bulvar tamir",
+    "robot süpürge Mudanya tamir",
+    "robot süpürge Osmangazi tamir",
+    "robot süpürge ücretsiz kontrol",
+    "robot süpürge garanti sonrası servis",
+    "robot süpürge en iyi servis",
+    "robot süpürge hızlı tamir",
+    "robot süpürge profesyonel servis",
+    "robot süpürge güvenilir tamir",
+    "robot süpürge bakım fiyatı",
+    "robot süpürge Bursa servis",
+    "robot süpürge servisi Bursa",
+    "robot süpürge yazılım güncelleme",
+    "robot süpürge şarj olmuyor",
+    "robot süpürge çalışmıyor",
+    "robot süpürge tekerlek arızası",
+    "robot süpürge onarım",
+    "robot süpürge tamirci öneri",
+    "robot süpürge orijinal parça",
+    "robot süpürge bakım Bursa",
+  ],
   openGraph: {
     type: "website",
     url: SITE_URL, // ← مطلق
@@ -124,7 +173,9 @@ export default function Index() {
             <BrandsSection />
             <WhyChooseUsSection />
             <ReviewsSection />
+            <OurServiss />
             {/* <ContactSection /> */}
+            <FaqSection />
             <FloatingActions />
             {/* <ContactSection /> */}
           </div>
