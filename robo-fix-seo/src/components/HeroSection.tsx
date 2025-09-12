@@ -10,6 +10,7 @@ import {
 } from "framer-motion";
 import Image from "next/image";
 import { useEffect } from "react";
+import { reportAdsConversionThenNavigate } from "@/lib/ads";
 
 export default function HeroSection() {
   // Mouse parallax for foreground group
@@ -24,7 +25,8 @@ export default function HeroSection() {
   const glowX = useTransform(mx, [-50, 50], ["20%", "80%"]);
   const glowY = useTransform(my, [-50, 50], ["30%", "70%"]);
   const glow = useMotionTemplate`radial-gradient(60% 60% at ${glowX} ${glowY}, rgba(255,255,255,0.10), transparent 60%)`;
-
+  const GADS_PHONE =
+    process.env.NEXT_PUBLIC_GADS_PHONE || "AW-17534185067/NLoeCOO285cbEOvc-ahB";
   useEffect(() => {
     // احترم تفضيل تقليل الحركة
     const prefersReduced =
@@ -156,7 +158,16 @@ export default function HeroSection() {
                   className="group relative h-11 sm:h-12 px-5 sm:px-7 font-bold text-base sm:text-lg rounded-xl shadow-lg shadow-black/25 hover:shadow-black/30"
                   aria-label="Robot süpürge tamiri için hemen arayın"
                 >
-                  <a href="tel:+905515222067">
+                  <a
+                    href="tel:+905515222067"
+                    onClick={(e) => {
+                      e.preventDefault();
+                      reportAdsConversionThenNavigate(
+                        GADS_PHONE,
+                        "tel:+905515222067"
+                      );
+                    }}
+                  >
                     <span
                       className="absolute -inset-px rounded-xl bg-white/10 opacity-0 group-hover:opacity-100 transition"
                       aria-hidden

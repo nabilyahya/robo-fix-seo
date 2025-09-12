@@ -8,9 +8,13 @@ import { useState } from "react";
 import { FaWhatsapp } from "react-icons/fa";
 import logo from "../../public/logo2.png";
 import Image from "next/image";
+import { reportAdsConversionThenNavigate } from "@/lib/ads";
 const Header = () => {
   const [isMobileMenuOpen, setIsMobileMenuOpen] = useState(false);
-
+  const GADS_WHATSAPP =
+    process.env.NEXT_PUBLIC_GADS_WHATSAPP ||
+    "AW-17534185067/NLoeCOO285cbEOvc-ahB";
+  const WHATSAPP_URL = "https://wa.me/+905515222067";
   const toggleMobileMenu = () => {
     setIsMobileMenuOpen(!isMobileMenuOpen);
   };
@@ -76,6 +80,10 @@ const Header = () => {
             target="_blank"
             rel="noopener noreferrer"
             aria-label="WhatsApp ile iletişime geç"
+            onClick={(e) => {
+              e.preventDefault(); // نضمن إرسال الحدث أولاً
+              reportAdsConversionThenNavigate(GADS_WHATSAPP, WHATSAPP_URL);
+            }}
             className="flex items-center gap-2"
           >
             <FaWhatsapp className="h-4 w-4" />
@@ -96,6 +104,10 @@ const Header = () => {
             href="https://wa.me/+905515222067"
             target="_blank"
             rel="noopener noreferrer"
+            onClick={(e) => {
+              e.preventDefault();
+              reportAdsConversionThenNavigate(GADS_WHATSAPP, WHATSAPP_URL);
+            }}
             className="flex items-center gap-1"
           >
             <FaWhatsapp className="h-4 w-4" />
