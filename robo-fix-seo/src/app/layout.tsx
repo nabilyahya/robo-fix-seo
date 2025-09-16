@@ -10,7 +10,7 @@ import Analytics from "./analytics";
 import ConsentBanner from "@/components/ConsentBanner";
 import { SITE_URL, GA4_ID, GADS_ID } from "@/lib/site";
 
-// ========= Fonts (swap + no preload يخفّض تأثيرها على LCP) =========
+// ========= Fonts (swap + no preload) =========
 const geistSans = Geist({
   variable: "--font-geist-sans",
   subsets: ["latin"],
@@ -28,19 +28,13 @@ const geistMono = Geist_Mono({
 // ========= Metadata =========
 export const metadata: Metadata = {
   metadataBase: new URL(SITE_URL),
-
   title: {
     default: "Robonarim",
     template: "%s | Robonarim",
   },
-
   description:
     "Robot süpürge onarım, bakım ve rehberler. Bursa ve çevresinde hızlı, şeffاف ve garantili servis.",
-
-  alternates: {
-    canonical: "/",
-  },
-
+  alternates: { canonical: "/" },
   openGraph: {
     type: "website",
     siteName: "Robonarim",
@@ -48,7 +42,6 @@ export const metadata: Metadata = {
     url: "/",
     images: ["/og.png"],
   },
-
   twitter: {
     card: "summary_large_image",
     title: "Robonarim",
@@ -56,7 +49,6 @@ export const metadata: Metadata = {
       "Robot süpürge onarım, bakım ve seçim rehberleri. Uzman ipuçlarıyla daha verimli temizlik.",
     images: ["/og.png"],
   },
-
   robots: {
     index: true,
     follow: true,
@@ -68,7 +60,6 @@ export const metadata: Metadata = {
       "max-video-preview": -1,
     },
   },
-
   icons: {
     icon: [{ url: "/favicon.ico" }],
     apple: [{ url: "/apple-touch-icon.png" }],
@@ -76,7 +67,7 @@ export const metadata: Metadata = {
   },
 };
 
-// ========= Viewport / PWA-ish bits =========
+// ========= Viewport =========
 export const viewport: Viewport = {
   themeColor: [
     { media: "(prefers-color-scheme: light)", color: "#ffffff" },
@@ -95,9 +86,10 @@ export default function RootLayout({
       <body
         className={`${geistSans.variable} ${geistMono.variable} antialiased min-h-dvh bg-background text-foreground`}
       >
-        {/* Google tag (gtag.js) — يعمل لِـ GA4 و/أو Google Ads حسب المتوفر */}
+        {/* Google tag (gtag.js) — يعمل لـ GA4 و/أو Google Ads حسب المتوفر */}
         {(GA4_ID || GADS_ID) && (
           <>
+            {/* حمّل المكتبة مرة واحدة فقط بأي معرّف متوفر */}
             <Script
               src={`https://www.googletagmanager.com/gtag/js?id=${
                 GA4_ID || GADS_ID
@@ -119,6 +111,7 @@ export default function RootLayout({
 
                 gtag('js', new Date());
 
+                // فعّل GA4 إن وُجد
                 ${
                   GA4_ID
                     ? `gtag('config', '${GA4_ID}', {
@@ -129,18 +122,19 @@ export default function RootLayout({
                     : ""
                 }
 
+                // فعّل Google Ads إن وُجد
                 ${GADS_ID ? `gtag('config', '${GADS_ID}');` : ""}
               `}
             </Script>
           </>
         )}
 
-        {/* تتبع تنقلات SPA بعد الموافقة على الخصوصية */}
+        {/* تتبع تنقلات SPA (عند الموافقة) */}
         <Suspense fallback={null}>
           <Analytics />
         </Suspense>
 
-        {/* بانر الموافقة على الكوكيز/الخصوصية */}
+        {/* بانر الموافقة على الخصوصية (يجب أن يستدعي gtag('consent','update', ...)) */}
         <Suspense fallback={null}>
           <ConsentBanner />
         </Suspense>
