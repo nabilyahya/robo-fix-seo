@@ -87,15 +87,30 @@ export async function readAll(): Promise<{ rows: CustomerRow[] }> {
 export async function findRowById(id: string) {
   const values = await loadValues();
   let rowIndex = -1;
+
+  const wanted = (id ?? "").toString().trim();
+
   for (let i = 1; i < values.length; i++) {
-    if (values[i][0] === id) {
-      rowIndex = i + 1;
+    const cell = (values[i]?.[0] ?? "").toString().trim();
+
+    // طابق كنص أولاً، ولو ما ظبط جرّب مقارنة رقمية
+    const sameText = cell === wanted;
+    const sameNumber =
+      cell !== "" &&
+      wanted !== "" &&
+      !Number.isNaN(Number(cell)) &&
+      !Number.isNaN(Number(wanted)) &&
+      Number(cell) === Number(wanted);
+
+    if (sameText || sameNumber) {
+      rowIndex = i + 1; // 1-based للـ Sheets
       break;
     }
   }
+
   return {
     rowIndex,
-    row: rowIndex > 0 ? (values[rowIndex - 1] as CustomerRow) : null,
+    row: rowIndex > 0 ? (values[rowIndex - 1] as any[]) : null,
   };
 }
 

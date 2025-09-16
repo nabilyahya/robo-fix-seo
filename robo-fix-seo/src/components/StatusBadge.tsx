@@ -1,4 +1,4 @@
-// src/app/customers/StatusBadge.tsx  (أو src/components/StatusBadge.tsx حسب مكانك)
+// src/components/StatusBadge.tsx
 
 export const STATUSES = {
   pending_picked_up: { label: "بانتظار الجلب", color: "bg-blue-600" },
@@ -22,20 +22,29 @@ export const STATUSES = {
 
 export type StatusKey = keyof typeof STATUSES;
 
-/** تحويل أي قيمة نصية (عربية/تركية/قديمة) إلى مفتاح StatusKey صالح */
+// تسميات تركية فقط للعرض (لا تغيّر المفاتيح)
+const TR_LABELS: Record<StatusKey, string> = {
+  pending_picked_up: "Alım bekleniyor",
+  picked_up: "Cihaz teslim alındı",
+  canceled: "İşlem iptal edildi",
+  checking: "İnceleme yapılıyor",
+  checked_waiting_ok: "İnceleme tamamlandı – onay bekleniyor",
+  approved_repairing: "Onaylandı – onarım sürüyor",
+  repaired_waiting_del: "Onarım tamamlandı – teslimat bekliyor",
+  delivered_success: "Teslimat başarıyla gerçekleştirildi",
+};
+
+/** تحويل أي قيمة نصية (عربي/تركي/قديمة) إلى مفتاح StatusKey صالح */
 export function normalizeStatus(input?: string | null): StatusKey {
   const fallback: StatusKey = "picked_up";
   if (!input) return fallback;
 
-  // لو وصلت القيمة أصلاً مفتاح صحيح
   if ((Object.keys(STATUSES) as StatusKey[]).includes(input as StatusKey)) {
     return input as StatusKey;
   }
 
-  // تحضير نص للمطابقة
   const s = String(input).trim().toLowerCase();
 
-  // مطابقة مباشرة شائعة بالعربي
   const exactAr: Record<string, StatusKey> = {
     "بانتظار الجلب": "pending_picked_up",
     "تم جلب الجهاز": "picked_up",
@@ -52,7 +61,7 @@ export function normalizeStatus(input?: string | null): StatusKey {
   };
   if (exactAr[input]) return exactAr[input];
 
-  // هيوريستكس بالعربي/تركي
+  // هيوريستكس عربي/تركي
   if (s.includes("جلب")) return "picked_up";
   if (s.includes("فحص"))
     return s.includes("جار") ? "checking" : "checked_waiting_ok";
@@ -61,31 +70,44 @@ export function normalizeStatus(input?: string | null): StatusKey {
   if (s.includes("توصيل")) return "repaired_waiting_del";
   if (s.includes("نجاح")) return "delivered_success";
 
-  // تركي شائع
+  // TR
   if (s.includes("inceleme"))
     return s.includes("devam") ? "checking" : "checked_waiting_ok";
   if (s.includes("onay")) return "approved_repairing";
   if (s.includes("tamir")) return "approved_repairing";
   if (s.includes("teslim"))
-    return s.includes("bekleniyor")
-      ? "repaired_waiting_del"
-      : "delivered_success";
+    return s.includes("beklen") ? "repaired_waiting_del" : "delivered_success";
+  if (s.includes("iptal")) return "canceled";
+  if (s.includes("alım") && s.includes("beklen")) return "pending_picked_up";
 
   return fallback;
 }
 
+/** جلب التسمية حسب اللغة (افتراضي عربي) */
+export function getStatusLabel(
+  key: StatusKey,
+  locale: "ar" | "tr" = "ar"
+): string {
+  if (locale === "tr") return TR_LABELS[key];
+  return STATUSES[key].label;
+}
+
 export default function StatusBadge({
   status,
+  locale = "ar", // ✅ افتراضي عربي
 }: {
   status: string | StatusKey;
+  locale?: "ar" | "tr";
 }) {
   const key = normalizeStatus(status);
-  const s = STATUSES[key]; // مضمون أنه موجود الآن
+  const color = STATUSES[key].color;
+  const label = getStatusLabel(key, locale);
+
   return (
     <span
-      className={`inline-flex items-center gap-2 ${s.color} text-white px-3 py-1 rounded-full text-xs`}
+      className={`inline-flex items-center gap-2 ${color} text-white px-3 py-1 rounded-full text-xs`}
     >
-      {s.label}
+      {label}
     </span>
   );
 }

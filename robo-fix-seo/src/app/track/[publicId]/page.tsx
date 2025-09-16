@@ -1,7 +1,8 @@
+// src/app/track/[publicId]/page.tsx
 import StatusBadge, {
   type StatusKey,
   normalizeStatus,
-  STATUSES,
+  getStatusLabel, // ✅ بدلًا من استخدام STATUSES مباشرة
 } from "@/components/StatusBadge";
 import { findRowByPublicId } from "@/lib/sheets";
 import { formatSheetDate } from "@/lib/date";
@@ -19,6 +20,7 @@ export default async function Page({
 }: NextPageProps<{ publicId: string }>) {
   const { publicId } = await params;
   const sp = (await searchParams) || {};
+
   const { row } = await findRowByPublicId(publicId);
   if (!row) return <div className="p-6">Bağlantı geçersiz.</div>;
 
@@ -43,7 +45,9 @@ export default async function Page({
 
   const status = (normalizeStatus(statusRaw as string) ||
     "picked_up") as StatusKey;
-  const statusLabel = STATUSES[status]?.label ?? "—";
+
+  // ✅ تسمية تركية فقط لهذه الصفحة
+  const statusLabel = getStatusLabel(status, "tr");
 
   return (
     <div className="px-4 py-6 max-w-2xl mx-auto">
@@ -79,7 +83,8 @@ export default async function Page({
                   {publicId}
                 </div>
               </div>
-              <StatusBadge status={status} />
+              {/* ✅ Badge بالتركي */}
+              <StatusBadge status={status} locale="tr" />
             </div>
             <p className="mt-3 text-neutral-700">
               Durumunuz düzenli olarak güncellenir.
