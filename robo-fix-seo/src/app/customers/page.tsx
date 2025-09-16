@@ -1,15 +1,27 @@
+// src/app/customers/page.tsx
 import CustomerTable from "./CustomerTable";
 import { readAll } from "@/lib/sheets";
 
 export const metadata = { title: "Robonarim | العملاء" };
 
-export default async function Page({
-  searchParams,
-}: {
-  searchParams?: { updated?: string };
-}) {
+// ✅ Next 15 يعرّف searchParams كـ Promise
+type NextPageProps = {
+  searchParams?: Promise<Record<string, string | string[] | undefined>>;
+};
+
+export default async function Page({ searchParams }: NextPageProps) {
+  const sp = (await searchParams) || {};
+  const updatedParam = sp.updated;
+  const updated =
+    typeof updatedParam === "string"
+      ? updatedParam
+      : Array.isArray(updatedParam)
+      ? updatedParam[0]
+      : undefined;
+
+  const showSuccess = updated === "1";
+
   const { rows } = await readAll();
-  const showSuccess = searchParams?.updated === "1";
 
   return (
     <div className="px-4 py-8 max-w-6xl mx-auto">

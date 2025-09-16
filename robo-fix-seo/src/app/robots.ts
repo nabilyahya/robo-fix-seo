@@ -13,11 +13,25 @@ export default function robots(): MetadataRoute.Robots {
   const isProd = ENV === "production";
 
   if (!isProd) {
-    return { rules: [{ userAgent: "*", disallow: "/" }] };
+    return {
+      rules: [
+        {
+          userAgent: "*",
+          allow: "/",
+          disallow: ["/customers", "/customers/*", "/track", "/track/*"],
+        },
+      ],
+    };
   }
 
   return {
-    rules: [{ userAgent: "*", allow: "/" }],
+    rules: [
+      {
+        userAgent: "*",
+        allow: "/",
+        disallow: ["/customers", "/customers/*", "/track", "/track/*"],
+      },
+    ],
     sitemap: `${SITE_URL}/sitemap.xml`,
     host: SITE_URL,
   };

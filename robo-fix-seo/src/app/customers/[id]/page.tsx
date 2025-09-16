@@ -19,7 +19,6 @@ async function saveAllAction(id: string, formData: FormData): Promise<void> {
   const { rowIndex, row } = await findRowById(id);
   if (!row || rowIndex < 0) throw new Error("Customer not found");
 
-  // قراءات من الفورم
   const name = String(formData.get("name") ?? "").trim();
   const phone = String(formData.get("phone") ?? "").trim();
   const address = String(formData.get("address") ?? "").trim();
@@ -30,35 +29,38 @@ async function saveAllAction(id: string, formData: FormData): Promise<void> {
   const status = statusRaw as StatusKey;
   if (!OPTIONS.includes(status)) throw new Error("Invalid status value");
 
-  // ✅ كتابة الحقول في الأعمدة الصحيحة: B..G
+  // B..G
   await updateCells(`'${SHEET_NAME}'!B${rowIndex}:G${rowIndex}`, [
     [name, phone, address, deviceType, issue, repairCost],
   ]);
 
-  // ✅ الحالة في H
+  // H: الحالة
   await updateCells(`'${SHEET_NAME}'!H${rowIndex}:H${rowIndex}`, [[status]]);
 
-  // ✅ آخر تحديث في J (وليس K)
+  // J: آخر تحديث
   await updateCells(`'${SHEET_NAME}'!J${rowIndex}:J${rowIndex}`, [
     [new Date().toISOString()],
   ]);
 
-  // تحديث الكاش ثم توجيه المستخدم لصفحة العملاء مع إشارة نجاح
   revalidatePath(`/customers/${id}`);
   revalidatePath(`/customers`);
   redirect("/customers?updated=1");
 }
 
 /** ====== صفحة التفاصيل ====== */
-export default async function Page({ params }: { params: { id: string } }) {
-  const { row } = await findRowById(params.id);
-  if (!row) return <div className="p-8">غير موجود (ID: {params.id})</div>;
+export default async function Page({
+  params,
+}: {
+  params: Promise<{ id: string }>; // ✅ Next 15 expects Promise here
+}) {
+  const { id } = await params; // ✅
+  const { row } = await findRowById(id);
+  if (!row) return <div className="p-8">غير موجود (ID: {id})</div>;
 
-  // تخطيط الصف وفق شيتك الحالي:
   // A: id, B: name, C: phone, D: address, E: deviceType, F: issue, G: repairCost,
   // H: status, I: createdAt, J: updatedAt, K: publicId, L: passCode
   const [
-    id,
+    _id,
     name,
     phone,
     address,
@@ -68,7 +70,7 @@ export default async function Page({ params }: { params: { id: string } }) {
     status,
     createdAt, // I
     updatedAt, // J
-    publicId, // K (رقم الفيش)
+    publicId, // K
   ] = row as any[];
 
   const normalizedStatus = normalizeStatus(status as string);
@@ -86,7 +88,7 @@ export default async function Page({ params }: { params: { id: string } }) {
         <StatusBadge status={normalizedStatus} />
       </div>
 
-      {/* بطاقات معلومات ثابتة */}
+      {/* بطاقات معلومات */}
       <div className="grid md:grid-cols-3 gap-4 mb-6">
         <div className="bg-white border rounded-2xl p-4">
           <div className="text-sm text-neutral-500">أُنشئ في</div>
@@ -100,7 +102,7 @@ export default async function Page({ params }: { params: { id: string } }) {
           <div className="text-sm text-neutral-500">رابط التتبّع</div>
           <a
             className="font-medium underline"
-            href={`/track/${publicId || ""}`} // ✅ استعمال رقم الفيش من K
+            href={`/track/${publicId || ""}`}
             target="_blank"
           >
             /track/{publicId || "—"}
@@ -108,7 +110,7 @@ export default async function Page({ params }: { params: { id: string } }) {
         </div>
       </div>
 
-      {/* فورم التعديل الكامل */}
+      {/* فورم التعديل */}
       <form
         action={saveAllAction.bind(null, id)}
         className="bg-white border rounded-2xl p-6 shadow"
@@ -165,7 +167,6 @@ export default async function Page({ params }: { params: { id: string } }) {
   );
 }
 
-/** عناصر إدخال صغيرة لتقليل التكرار */
 function Input({
   name,
   label,

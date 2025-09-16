@@ -1,4 +1,3 @@
-// src/app/track/[publicId]/page.tsx
 import StatusBadge, {
   type StatusKey,
   normalizeStatus,
@@ -7,25 +6,20 @@ import StatusBadge, {
 import { findRowByPublicId } from "@/lib/sheets";
 import { formatSheetDate } from "@/lib/date";
 
+type NextPageProps<P extends Record<string, any> = {}> = {
+  params: Promise<P>;
+  searchParams?: Promise<Record<string, string | string[] | undefined>>;
+};
+
 export const metadata = { title: "Robonarim | Sipariş Takibi" };
 
-/**
- * Sayfa, K sütunundaki publicId ile arama yapar ve
- * L sütunundaki şifre (passCode) varsa giriş ister.
- *
- * Sayfa düzeni (senin tablon):
- * A id, B name, C phone, D address, E device, F issue, G cost,
- * H status, I createdAt, J lastUpdated (opsiyonel/boş olabilir),
- * K publicId, L passCode
- */
 export default async function Page({
   params,
   searchParams,
-}: {
-  params: { publicId: string };
-  searchParams?: { pass?: string };
-}) {
-  const { row } = await findRowByPublicId(params.publicId);
+}: NextPageProps<{ publicId: string }>) {
+  const { publicId } = await params;
+  const sp = (await searchParams) || {};
+  const { row } = await findRowByPublicId(publicId);
   if (!row) return <div className="p-6">Bağlantı geçersiz.</div>;
 
   const [
@@ -44,28 +38,15 @@ export default async function Page({
   ] = row as any[];
 
   const needsPass = Boolean((passCode ?? "").toString().trim());
-  const entered = (searchParams?.pass ?? "").trim();
+  const entered = (typeof sp.pass === "string" ? sp.pass : "").trim();
   const ok = !needsPass || (entered && entered === String(passCode).trim());
 
   const status = (normalizeStatus(statusRaw as string) ||
     "picked_up") as StatusKey;
   const statusLabel = STATUSES[status]?.label ?? "—";
 
-  // Duruma göre kısa açıklama (TR)
-  const statusHint: Record<string, string> = {
-    picked_up: "Cihazınız teslim alındı, ön kontroller yapılıyor.",
-    checking: "Teknik ekibimiz arıza tespiti yapıyor.",
-    checked_waiting_ok:
-      "Tespit tamamlandı — devam etmek için onayınızı bekliyoruz.",
-    approved_repairing: "Onay alındı — şu anda onarım sürecinde.",
-    repaired_waiting_del: "Onarım tamamlandı — teslimat planlanıyor.",
-    delivered_success: "Teslimat başarıyla gerçekleştirildi. İyi kullanımlar!",
-    canceled: "İşlem iptal edildi.",
-  };
-
   return (
     <div className="px-4 py-6 max-w-2xl mx-auto">
-      {/* Parola kapısı */}
       {needsPass && !ok ? (
         <div className="bg-white border rounded-2xl p-5 shadow-sm">
           <h1 className="text-xl font-bold mb-2">Cihaz Durumu</h1>
@@ -90,23 +71,21 @@ export default async function Page({
         </div>
       ) : (
         <>
-          {/* Hero */}
           <div className="rounded-3xl bg-gradient-to-br from-emerald-50 to-emerald-100 border border-emerald-200 p-5 mb-4">
             <div className="flex items-center justify-between gap-3">
               <div>
                 <div className="text-sm text-emerald-700">Takip Numarası</div>
                 <div className="text-lg font-bold tracking-wide">
-                  {params.publicId}
+                  {publicId}
                 </div>
               </div>
               <StatusBadge status={status} />
             </div>
             <p className="mt-3 text-neutral-700">
-              {statusHint[status] ?? "Durumunuz düzenli olarak güncellenir."}
+              Durumunuz düzenli olarak güncellenir.
             </p>
           </div>
 
-          {/* Özet kartları (mobil uyumlu) */}
           <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 mb-4">
             <Card title="Müşteri Adı" value={name || "—"} />
             <Card title="Durum" value={statusLabel} />
@@ -115,7 +94,6 @@ export default async function Page({
             <Card title="Adres" value={address || "—"} />
           </div>
 
-          {/* Zaman bilgisi */}
           <div className="bg-white border rounded-2xl p-5 shadow-sm">
             <h2 className="text-base font-semibold mb-3">Zaman Çizelgesi</h2>
             <ul className="space-y-3">
@@ -129,18 +107,12 @@ export default async function Page({
               />
             </ul>
           </div>
-
-          <div className="mt-4 text-sm text-neutral-600">
-            Bu sayfa güncel durumları yansıtır. Takip numaranızı saklamayı
-            unutmayın.
-          </div>
         </>
       )}
     </div>
   );
 }
 
-/* Küçük yardımcı bileşenler */
 function Card({ title, value }: { title: string; value: string }) {
   return (
     <div className="bg-white border rounded-2xl p-4 shadow-sm">
