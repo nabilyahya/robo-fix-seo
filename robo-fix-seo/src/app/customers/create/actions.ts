@@ -1,9 +1,18 @@
 "use server";
 import { genPass6, genPublicId, hashPass } from "@/lib/crypto";
 import { appendCustomer } from "@/lib/sheets";
+import { sendWhatsAppText } from "@/lib/whatsapp";
 
 import { randomUUID } from "crypto";
 
+function buildTrackUrl(publicId: string) {
+  const base =
+    process.env.NEXT_PUBLIC_SITE_URL ||
+    (process.env.VERCEL_URL
+      ? `https://${process.env.VERCEL_URL}`
+      : "http://localhost:3000");
+  return `${base}/track/${publicId}`;
+}
 export async function createCustomer(formData: FormData) {
   const name = String(formData.get("name") || "");
   const phone = String(formData.get("phone") || "");
@@ -38,6 +47,18 @@ export async function createCustomer(formData: FormData) {
     "",
     "",
   ]);
-
+  const notifyPhone = process.env.WHATSAPP_TARGET_PHONE || "";
+  if (notifyPhone) {
+    const msg =
+      `📢 عميل جديد تمّت إضافته\n\n` +
+      `👤 الاسم: ${name}\n` +
+      `📱 الهاتف: ${phone}\n` +
+      `🔗 رابط التتبّع: ${buildTrackUrl(publicId)}`;
+    try {
+      await sendWhatsAppText(notifyPhone, msg);
+    } catch (e) {
+      console.error("WhatsApp notify failed:", e);
+    }
+  }
   return { id, publicId, pass };
 }

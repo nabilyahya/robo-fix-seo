@@ -1,30 +1,38 @@
-const BASE_URL = (phoneId: string) =>
-  `https://graph.facebook.com/v21.0/${phoneId}/messages`;
+// src/lib/whatsapp.ts
+const API_VER = "v21.0";
 
-function assertEnv() {
-  if (!process.env.WHATSAPP_TOKEN) {
-    throw new Error("Missing WHATSAPP_TOKEN env");
-  }
-  if (!process.env.WHATSAPP_PHONE_NUMBER_ID) {
-    throw new Error("Missing WHATSAPP_PHONE_NUMBER_ID env");
-  }
+function must(name: string, v?: string) {
+  if (!v) throw new Error(`Missing env: ${name}`);
+  return v;
 }
 
-async function post(payload: any) {
-  assertEnv();
-  const url = BASE_URL(process.env.WHATSAPP_PHONE_NUMBER_ID!);
+/** إرسال رسالة نصية عبر واتساب لرقم معيّن */
+export async function sendWhatsAppText(toPhone: string, body: string) {
+  const token = must("WHATSAPP_TOKEN", process.env.WHATSAPP_TOKEN);
+  const phoneId = must(
+    "WHATSAPP_PHONE_NUMBER_ID",
+    process.env.WHATSAPP_PHONE_NUMBER_ID
+  );
+
+  const url = `https://graph.facebook.com/${API_VER}/${phoneId}/messages`;
   const res = await fetch(url, {
     method: "POST",
     headers: {
-      Authorization: `Bearer ${process.env.WHATSAPP_TOKEN}`,
+      Authorization: `Bearer ${token}`,
       "Content-Type": "application/json",
     },
-    body: JSON.stringify(payload),
+    body: JSON.stringify({
+      messaging_product: "whatsapp",
+      to: toPhone,
+      type: "text",
+      text: { body },
+    }),
   });
+
   const json = await res.json();
   if (!res.ok) {
     throw new Error(
-      `WhatsApp API error: ${res.status} ${res.statusText} :: ${JSON.stringify(
+      `WhatsApp send error: ${res.status} ${res.statusText} - ${JSON.stringify(
         json
       )}`
     );
@@ -32,32 +40,12 @@ async function post(payload: any) {
   return json;
 }
 
-/** Send a template message (business-initiated outside 24h window) */
-export async function sendTemplate(
-  toPhone: string,
-  template: string,
-  lang = "ar",
-  components?: any[]
-) {
-  return post({
-    messaging_product: "whatsapp",
-    to: toPhone,
-    type: "template",
-    template: { name: template, language: { code: lang }, components },
-  });
-}
-
-/** Send a document by public URL */
-export async function sendDocument(
-  toPhone: string,
-  link: string,
-  filename = "Robonarim-Teslim.pdf",
-  caption?: string
-) {
-  return post({
-    messaging_product: "whatsapp",
-    to: toPhone,
-    type: "document",
-    document: { link, filename, caption },
-  });
+/** يبني رابط التتبّع بناءً على NEXT_PUBLIC_SITE_URL أو VERCEL_URL */
+export function buildTrackUrl(publicId: string) {
+  const base =
+    process.env.NEXT_PUBLIC_SITE_URL ||
+    (process.env.VERCEL_URL
+      ? `https://${process.env.VERCEL_URL}`
+      : "http://localhost:3000");
+  return `${base}/track/${publicId}`;
 }
