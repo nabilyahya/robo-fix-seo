@@ -71,7 +71,9 @@ async function genUniqueReceiptNo(): Promise<string> {
 }
 
 /* ============================
-   HTML -> PDF (puppeteer-core + @sparticuz/chromium)
+   HTML -> PDF
+   - Serverless: puppeteer-core + @sparticuz/chromium
+   - Local: يستخدم متصفح النظام أو puppeteer الكامل إن وُجد
 ============================ */
 async function htmlToPdfBuffer(html: string): Promise<Buffer> {
   const isServerless =
@@ -83,28 +85,50 @@ async function htmlToPdfBuffer(html: string): Promise<Buffer> {
 
   if (isServerless) {
     const exePath = await chromium.executablePath();
-    // في بيئات Serverless، @sparticuz/chromium يضمّن المكتبات اللازمة
-    // لا داعي لـ LD_LIBRARY_PATH هنا عادة.
+    if (!exePath) {
+      throw new Error("chromium.executablePath() returned empty path");
+    }
+
+    // ✨ أهم خطوة: اجعل اللودر يشير إلى مجلد مكتبات chromium
+    const exeDir = path.dirname(exePath);
+    process.env.LD_LIBRARY_PATH = [exeDir, process.env.LD_LIBRARY_PATH || ""]
+      .filter(Boolean)
+      .join(":");
+    process.env.PATH = [exeDir, process.env.PATH || ""]
+      .filter(Boolean)
+      .join(":");
+
+    // (اختياري) وضعيات سليمة لبيئة سيرفرلس
+    (chromium as any).setHeadlessMode?.(true);
+    (chromium as any).setGraphicsMode?.(false);
+
     launchOptions = {
-      args: chromium.args,
+      args: [
+        ...chromium.args,
+        "--no-sandbox",
+        "--disable-setuid-sandbox",
+        "--disable-dev-shm-usage",
+        "--disable-gpu",
+        "--single-process",
+        "--no-zygote",
+      ],
       defaultViewport: chromium.defaultViewport,
       executablePath: exePath,
       headless: chromium.headless, // true
       ignoreHTTPSErrors: true,
     };
   } else {
-    // تشغيل محلي: نستعمل متصفح النظام
+    // تشغيل محلي
     let executablePath = process.env.PUPPETEER_EXECUTABLE_PATH;
 
     if (!executablePath) {
-      // اختيارياً: لو مثبّت puppeteer الكامل محليًا فقط
       try {
+        // إن كان puppeteer الكامل مثبتًا محليًا فقط (ليس على Vercel)
         // eslint-disable-next-line @typescript-eslint/no-var-requires
         const puppeteerFull: any = require("puppeteer");
         executablePath = puppeteerFull.executablePath();
         log("local chrome from puppeteer", { path: executablePath });
       } catch {
-        // البحث في مسارات شائعة
         const candidates = [
           "C:\\Program Files\\Google\\Chrome\\Application\\chrome.exe",
           "C:\\Program Files (x86)\\Google\\Chrome\\Application\\chrome.exe",
@@ -140,7 +164,7 @@ async function htmlToPdfBuffer(html: string): Promise<Buffer> {
   }
 
   const browser = await puppeteer.launch(launchOptions);
-  log("puppeteer launched", { serverless: !!process.env.VERCEL });
+  log("puppeteer launched", { serverless: isServerless });
 
   try {
     const page = await browser.newPage();
@@ -210,7 +234,7 @@ function bufferToStream(buf: Buffer) {
   return stream;
 }
 
-// إعادة المحاولة على أخطاء الشبكة
+// إعادة المحاولة على أخطاء الشبكة — أنشئ Stream جديد كل مرة
 async function uploadWithRetry<T>(
   fn: () => Promise<T>,
   label: string,
@@ -249,7 +273,6 @@ async function uploadPdfToDrive(
 
   log("drive uploading", { fileName, size: pdfBuffer.length });
 
-  // 👇 مهم: أنشئ Stream جديد في كل محاولة (تفادي stream.push() after EOF)
   const createRes = await uploadWithRetry(
     () =>
       drive.files.create({
