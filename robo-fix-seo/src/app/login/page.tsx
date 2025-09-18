@@ -1,10 +1,9 @@
 import Image from "next/image";
-import { loginAction } from "./actions";
 import logo from "../../../public/logo.png";
 export default async function Page({
   searchParams,
 }: {
-  // في Next 15 searchParams قد تكون Promise
+  // في Next 15 قد تكون Promise
   searchParams?: Promise<Record<string, string | string[]>>;
 }) {
   const sp = (await searchParams) ?? {};
@@ -19,7 +18,7 @@ export default async function Page({
 
   return (
     <main className="min-h-screen bg-gradient-to-br from-slate-900 via-slate-800 to-emerald-900 text-slate-50 relative overflow-hidden">
-      {/* ضجيج خفيف على الخلفية */}
+      {/* نسيج خفيف على الخلفية */}
       <div className="pointer-events-none absolute inset-0 opacity-20 mix-blend-overlay [background-image:radial-gradient(#ffffff22_1px,transparent_1px)] [background-size:16px_16px]" />
 
       <div className="relative z-10 flex min-h-screen items-center justify-center p-4">
@@ -48,7 +47,8 @@ export default async function Page({
               </div>
             )}
 
-            <form action={loginAction} className="space-y-4">
+            {/* مهم: POST إلى /api/login (Route Handler) */}
+            <form action="/api/login" method="POST" className="space-y-4">
               {/* اسم المستخدم */}
               <div>
                 <label
@@ -115,22 +115,18 @@ export default async function Page({
               </div>
 
               {/* زر الدخول */}
-              <button
-                className="mt-2 w-full rounded-xl bg-emerald-600 px-4 py-2.5 text-white font-medium shadow-lg shadow-emerald-600/20
-                           hover:bg-emerald-700 focus:outline-none focus:ring-4 focus:ring-emerald-300 active:bg-emerald-800 transition"
-              >
+              <button className="mt-2 w-full rounded-xl bg-emerald-600 px-4 py-2.5 text-white font-medium shadow-lg shadow-emerald-600/20 hover:bg-emerald-700 focus:outline-none focus:ring-4 focus:ring-emerald-300 active:bg-emerald-800 transition">
                 دخول
               </button>
             </form>
 
-            {/* تلميح أمان */}
             <p className="mt-4 text-xs text-slate-500 leading-relaxed">
               للاستخدام الداخلي فقط. سيتم تسجيل الدخول عبر جلسة آمنة (HTTP-only
-              Cookie). في حال نسيت كلمة المرور تواصل مع المدير.
+              Cookie).
             </p>
           </div>
 
-          {/* فوتر صغير */}
+          {/* فوتر */}
           <p className="mt-6 text-center text-xs text-slate-300">
             © {new Date().getFullYear()} Robonarim. كل الحقوق محفوظة.
           </p>
