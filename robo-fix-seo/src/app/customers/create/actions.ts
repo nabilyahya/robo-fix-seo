@@ -15,8 +15,6 @@ import {
 } from "@/lib/sheets";
 import { sendWhatsAppText } from "@/lib/whatsapp";
 import { buildTeslimatHTML } from "@/templates/teslimat";
-import chromium from "@sparticuz/chromium";
-import puppeteer from "puppeteer-core";
 import { google } from "googleapis";
 
 /* ============================
@@ -71,109 +69,64 @@ async function genUniqueReceiptNo(): Promise<string> {
 }
 
 /* ============================
-   HTML -> PDF
-   - Serverless: puppeteer-core + @sparticuz/chromium
-   - Local: يستخدم متصفح النظام أو puppeteer الكامل إن وُجد
+   HTML -> PDF (Puppeteer-core on Vercel, Puppeteer locally)
 ============================ */
 async function htmlToPdfBuffer(html: string): Promise<Buffer> {
-  const isServerless =
-    !!process.env.VERCEL ||
-    !!process.env.AWS_REGION ||
-    !!process.env.LAMBDA_TASK_ROOT;
+  const isVercel = !!process.env.VERCEL || !!process.env.VERCEL_ENV;
 
-  let launchOptions: any;
+  // نحدّد الحزمة ومصار الإطلاق حسب البيئة
+  let puppeteer: any;
+  let launchOptions: any = { headless: true };
 
-  if (isServerless) {
-    const exePath = await chromium.executablePath();
-    if (!exePath) {
-      throw new Error("chromium.executablePath() returned empty path");
-    }
+  if (isVercel) {
+    const chromium = (await import("@sparticuz/chromium")).default;
 
-    // ✨ أهم خطوة: اجعل اللودر يشير إلى مجلد مكتبات chromium
-    const exeDir = path.dirname(exePath);
-    process.env.LD_LIBRARY_PATH = [exeDir, process.env.LD_LIBRARY_PATH || ""]
-      .filter(Boolean)
-      .join(":");
-    process.env.PATH = [exeDir, process.env.PATH || ""]
-      .filter(Boolean)
-      .join(":");
+    // إعدادات يوصي فيها Sparticuz/فريسِل
+    chromium.setHeadlessMode = true;
+    chromium.setGraphicsMode = false;
 
-    // (اختياري) وضعيات سليمة لبيئة سيرفرلس
-    (chromium as any).setHeadlessMode?.(true);
-    (chromium as any).setGraphicsMode?.(false);
+    puppeteer = await import("puppeteer-core");
 
+    // NOTE: chromium.args تحتوي flags مناسبة للسيرفرلس (no-sandbox…)
     launchOptions = {
-      args: [
-        ...chromium.args,
-        "--no-sandbox",
-        "--disable-setuid-sandbox",
-        "--disable-dev-shm-usage",
-        "--disable-gpu",
-        "--single-process",
-        "--no-zygote",
-      ],
+      ...launchOptions,
+      args: chromium.args,
+      executablePath: await chromium.executablePath(),
       defaultViewport: chromium.defaultViewport,
-      executablePath: exePath,
-      headless: chromium.headless, // true
       ignoreHTTPSErrors: true,
     };
   } else {
-    // تشغيل محلي
-    let executablePath = process.env.PUPPETEER_EXECUTABLE_PATH;
-
-    if (!executablePath) {
-      try {
-        // إن كان puppeteer الكامل مثبتًا محليًا فقط (ليس على Vercel)
-        // eslint-disable-next-line @typescript-eslint/no-var-requires
-        const puppeteerFull: any = require("puppeteer");
-        executablePath = puppeteerFull.executablePath();
-        log("local chrome from puppeteer", { path: executablePath });
-      } catch {
-        const candidates = [
-          "C:\\Program Files\\Google\\Chrome\\Application\\chrome.exe",
-          "C:\\Program Files (x86)\\Google\\Chrome\\Application\\chrome.exe",
-          "C:\\Program Files\\Microsoft\\Edge\\Application\\msedge.exe",
-          "C:\\Program Files (x86)\\Microsoft\\Edge\\Application\\msedge.exe",
-          "/Applications/Google Chrome.app/Contents/MacOS/Google Chrome",
-          "/Applications/Microsoft Edge.app/Contents/MacOS/Microsoft Edge",
-          "/usr/bin/google-chrome",
-          "/usr/bin/chromium-browser",
-          "/usr/bin/chromium",
-        ];
-        executablePath = candidates.find((p) => {
-          try {
-            return fs.existsSync(p);
-          } catch {
-            return false;
-          }
-        });
-        log("local chrome from candidates", { path: executablePath });
-      }
+    // محليًا نستعمل puppeteer الكامل (أسرع وأسهل)
+    puppeteer = await import("puppeteer");
+    // نحاول تلقّي مسار المتصفح المُثبّت
+    // puppeteer.executablePath() متوفرة محليًا
+    const localExec = (puppeteer as any).executablePath?.() as
+      | string
+      | undefined;
+    if (localExec) {
+      launchOptions = { ...launchOptions, executablePath: localExec };
     }
-
-    if (!executablePath) {
-      throw new Error(
-        "لم يتم العثور على Chrome/Edge محليًا. ثبّت Google Chrome/Edge أو عرّف المتغير PUPPETEER_EXECUTABLE_PATH."
-      );
-    }
-
-    launchOptions = {
-      executablePath,
-      headless: true,
-    };
   }
 
   const browser = await puppeteer.launch(launchOptions);
-  log("puppeteer launched", { serverless: isServerless });
+  log("puppeteer launched", { isVercel });
 
   try {
     const page = await browser.newPage();
     await page.setContent(html, { waitUntil: "networkidle0" });
-    const pdf = await page.pdf({
-      format: "A4",
-      printBackground: true,
-      margin: { top: "18mm", bottom: "18mm", left: "18mm", right: "18mm" },
-    });
+    const pdf: Buffer =
+      typeof page.pdf === "function"
+        ? await page.pdf({
+            format: "A4",
+            printBackground: true,
+            margin: {
+              top: "18mm",
+              bottom: "18mm",
+              left: "18mm",
+              right: "18mm",
+            },
+          })
+        : Buffer.from([]);
     log("pdf generated", { bytes: pdf.length });
     return Buffer.from(pdf);
   } finally {
@@ -227,23 +180,23 @@ function getDriveClient() {
   return google.drive({ version: "v3", auth });
 }
 
-// googleapis يتوقع Stream في media.body
+// googleapis يحتاج Stream في media.body
 function bufferToStream(buf: Buffer) {
   const stream = new PassThrough();
   stream.end(buf);
   return stream;
 }
 
-// إعادة المحاولة على أخطاء الشبكة — أنشئ Stream جديد كل مرة
+// retry helper
 async function uploadWithRetry<T>(
-  fn: () => Promise<T>,
+  fnFactory: () => Promise<T>,
   label: string,
   tries = 3
 ): Promise<T> {
   let lastErr: unknown;
   for (let i = 1; i <= tries; i++) {
     try {
-      return await fn();
+      return await fnFactory();
     } catch (e: any) {
       lastErr = e;
       const msg = e?.message || "";
@@ -273,6 +226,7 @@ async function uploadPdfToDrive(
 
   log("drive uploading", { fileName, size: pdfBuffer.length });
 
+  // ⚠️ مهم: أنشئ media.body جديد في كل محاولة
   const createRes = await uploadWithRetry(
     () =>
       drive.files.create({
