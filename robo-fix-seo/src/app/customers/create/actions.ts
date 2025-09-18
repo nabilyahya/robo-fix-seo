@@ -2,6 +2,7 @@
 "use server";
 
 import fs from "node:fs";
+import path from "node:path";
 import { PassThrough } from "node:stream";
 import { normalizeStatus } from "@/components/StatusBadge";
 import {
@@ -14,8 +15,9 @@ import {
 } from "@/lib/sheets";
 import { sendWhatsAppText } from "@/lib/whatsapp";
 import { buildTeslimatHTML } from "@/templates/teslimat";
+import chromium from "@sparticuz/chromium";
+import puppeteer from "puppeteer-core";
 import { google } from "googleapis";
-import { chromium as pwChromium } from "playwright";
 
 /* ============================
    Logs
@@ -69,41 +71,90 @@ async function genUniqueReceiptNo(): Promise<string> {
 }
 
 /* ============================
-   HTML -> PDF (Playwright)
+   HTML -> PDF (puppeteer-core + @sparticuz/chromium)
 ============================ */
 async function htmlToPdfBuffer(html: string): Promise<Buffer> {
-  // Playwright يعمل محليًا وعلى Vercel بدون مسارات تنفيذية مخصّصة
-  const browser = await pwChromium.launch({
-    headless: true,
-    args: [
-      "--no-sandbox",
-      "--disable-setuid-sandbox",
-      "--disable-dev-shm-usage",
-      "--disable-gpu",
-      "--single-process",
-      "--no-zygote",
-      "--font-render-hinting=none",
-    ],
-  });
+  const isServerless =
+    !!process.env.VERCEL ||
+    !!process.env.AWS_REGION ||
+    !!process.env.LAMBDA_TASK_ROOT;
+
+  let launchOptions: any;
+
+  if (isServerless) {
+    const exePath = await chromium.executablePath();
+    // في بيئات Serverless، @sparticuz/chromium يضمّن المكتبات اللازمة
+    // لا داعي لـ LD_LIBRARY_PATH هنا عادة.
+    launchOptions = {
+      args: chromium.args,
+      defaultViewport: chromium.defaultViewport,
+      executablePath: exePath,
+      headless: chromium.headless, // true
+      ignoreHTTPSErrors: true,
+    };
+  } else {
+    // تشغيل محلي: نستعمل متصفح النظام
+    let executablePath = process.env.PUPPETEER_EXECUTABLE_PATH;
+
+    if (!executablePath) {
+      // اختيارياً: لو مثبّت puppeteer الكامل محليًا فقط
+      try {
+        // eslint-disable-next-line @typescript-eslint/no-var-requires
+        const puppeteerFull: any = require("puppeteer");
+        executablePath = puppeteerFull.executablePath();
+        log("local chrome from puppeteer", { path: executablePath });
+      } catch {
+        // البحث في مسارات شائعة
+        const candidates = [
+          "C:\\Program Files\\Google\\Chrome\\Application\\chrome.exe",
+          "C:\\Program Files (x86)\\Google\\Chrome\\Application\\chrome.exe",
+          "C:\\Program Files\\Microsoft\\Edge\\Application\\msedge.exe",
+          "C:\\Program Files (x86)\\Microsoft\\Edge\\Application\\msedge.exe",
+          "/Applications/Google Chrome.app/Contents/MacOS/Google Chrome",
+          "/Applications/Microsoft Edge.app/Contents/MacOS/Microsoft Edge",
+          "/usr/bin/google-chrome",
+          "/usr/bin/chromium-browser",
+          "/usr/bin/chromium",
+        ];
+        executablePath = candidates.find((p) => {
+          try {
+            return fs.existsSync(p);
+          } catch {
+            return false;
+          }
+        });
+        log("local chrome from candidates", { path: executablePath });
+      }
+    }
+
+    if (!executablePath) {
+      throw new Error(
+        "لم يتم العثور على Chrome/Edge محليًا. ثبّت Google Chrome/Edge أو عرّف المتغير PUPPETEER_EXECUTABLE_PATH."
+      );
+    }
+
+    launchOptions = {
+      executablePath,
+      headless: true,
+    };
+  }
+
+  const browser = await puppeteer.launch(launchOptions);
+  log("puppeteer launched", { serverless: !!process.env.VERCEL });
 
   try {
-    const context = await browser.newContext({
-      viewport: { width: 1240, height: 1754 }, // قرابة A4 @ 96DPI
-      deviceScaleFactor: 1,
-    });
-    const page = await context.newPage();
-    await page.setContent(html, { waitUntil: "networkidle" });
+    const page = await browser.newPage();
+    await page.setContent(html, { waitUntil: "networkidle0" });
     const pdf = await page.pdf({
       format: "A4",
       printBackground: true,
       margin: { top: "18mm", bottom: "18mm", left: "18mm", right: "18mm" },
     });
-    log("pdf generated", { bytes: pdf.byteLength });
-    await context.close();
+    log("pdf generated", { bytes: pdf.length });
     return Buffer.from(pdf);
   } finally {
     await browser.close();
-    log("playwright closed");
+    log("puppeteer closed");
   }
 }
 
@@ -152,12 +203,14 @@ function getDriveClient() {
   return google.drive({ version: "v3", auth });
 }
 
+// googleapis يتوقع Stream في media.body
 function bufferToStream(buf: Buffer) {
   const stream = new PassThrough();
   stream.end(buf);
   return stream;
 }
 
+// إعادة المحاولة على أخطاء الشبكة
 async function uploadWithRetry<T>(
   fn: () => Promise<T>,
   label: string,
@@ -196,14 +249,13 @@ async function uploadPdfToDrive(
 
   log("drive uploading", { fileName, size: pdfBuffer.length });
 
-  // ⬅️ ملاحظة: ما عاد في const media خارج retry
+  // 👇 مهم: أنشئ Stream جديد في كل محاولة (تفادي stream.push() after EOF)
   const createRes = await uploadWithRetry(
     () =>
       drive.files.create({
         requestBody: fileMeta,
         media: {
           mimeType: "application/pdf",
-          // ⬅️ لكل محاولة منعمل Stream جديد من الـ Buffer
           body: bufferToStream(pdfBuffer),
         },
         uploadType: "multipart",
