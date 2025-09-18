@@ -1,3 +1,4 @@
+// app/customers/CustomersClient.tsx
 "use client";
 
 import { useMemo, useState } from "react";
@@ -15,39 +16,33 @@ type Row = any[];
 type Props = {
   rows?: Row[] | null;
   showSuccess?: boolean;
-  role?: string; // "Kargo" | "Admin" | ...
+  role?: string; // "Kargo" | "Usta" | ...
+  fetchError?: string; // رسالة خطأ تقنية اختيارية من السيرفر
 };
 
-/** تسميات الحالات حسب طلبك */
-const STATUS_LABELS: Partial<Record<StatusKey, string | null>> = {
+const ACTION_LABELS: Partial<Record<StatusKey, string>> = {
   pending_picked_up: "تم الاستلام",
-  picked_up: "بدء الفحص",
-  checking: "إنهاء الفحص",
-  checked_waiting_ok: "اعتماد التصليح",
-  approved_repairing: "إنهاء التصليح",
-  repaired_waiting_del: "تسليم للعميل",
-  delivered_success: null,
-  canceled: null,
+  picked_up: "جار الفحص",
+  checking: "تم الفحص بانتظار الموافقة",
+  checked_waiting_ok: "إنهاء التصليح",
+  approved_repairing: "تم التصليح بانتظار التوصيل",
+  repaired_waiting_del: "تم التوصيل",
 };
 
-function labelForStatus(s: StatusKey) {
-  const custom = STATUS_LABELS[s];
-  if (custom !== undefined && custom !== null) return custom;
-  switch (s) {
-    case "delivered_success":
-      return "تم التسليم";
-    case "canceled":
-      return "ملغي";
-
-    default:
-      return s.replaceAll("_", " ");
-  }
-}
+const STATUS_SORT_WEIGHT: Record<StatusKey, number> = {
+  checking: 0,
+  approved_repairing: 1,
+  repaired_waiting_del: 2,
+  checked_waiting_ok: 3,
+  delivered_success: 90,
+  canceled: 90,
+  picked_up: 99,
+  pending_picked_up: 99,
+} as const;
 
 function sanitizePhone(p: string) {
   return (p || "").replace(/\D+/g, "");
 }
-
 function parseDMYToEpoch(v: unknown): number | null {
   if (typeof v === "number") return v;
   if (typeof v !== "string") return null;
@@ -61,13 +56,22 @@ function parseDMYToEpoch(v: unknown): number | null {
   return d.getTime();
 }
 
-export default function CustomersClient({ rows, showSuccess, role }: Props) {
+export default function CustomersClient({
+  rows,
+  showSuccess,
+  role,
+  fetchError,
+}: Props) {
   const safeRows = useMemo<Row[]>(
     () => (Array.isArray(rows) ? rows : []),
     [rows]
   );
 
-  // واجهة محلية 100%
+  const roleKey = (role || "").toLowerCase();
+  const isKargo = roleKey === "kargo";
+  const isUsta = roleKey === "usta";
+
+  // واجهة محلية (بدون calls)
   const [q, setQ] = useState("");
   const [status, setStatus] = useState<"" | StatusKey>("");
   const [sort, setSort] = useState<
@@ -79,129 +83,198 @@ export default function CustomersClient({ rows, showSuccess, role }: Props) {
     | "name_desc"
   >("updated_desc");
   const [openFilters, setOpenFilters] = useState(false);
-  const [successVisible, setSuccessVisible] = useState(!!showSuccess);
 
-  // خيارات الحالة من الداتا
+  // خيارات الحالة (بعد اعتبار الدور)
   const statusOptions = useMemo(() => {
     const s = new Set<StatusKey>();
-    for (const r of safeRows)
-      s.add(normalizeStatus((r[7] ?? "picked_up") as string) as StatusKey);
+    for (const r of safeRows) {
+      const normalized = normalizeStatus(
+        (r[7] ?? "picked_up") as string
+      ) as StatusKey;
+      if (isKargo) {
+        if (
+          !(
+            ["pending_picked_up", "repaired_waiting_del"] as StatusKey[]
+          ).includes(normalized)
+        )
+          continue;
+      } else if (isUsta) {
+        if (
+          !(
+            [
+              "picked_up",
+              "checking",
+              "checked_waiting_ok",
+              "approved_repairing",
+              "repaired_waiting_del",
+            ] as StatusKey[]
+          ).includes(normalized)
+        )
+          continue;
+      }
+      s.add(normalized);
+    }
     return Array.from(s);
-  }, [safeRows]);
+  }, [safeRows, isKargo, isUsta]);
 
-  // فلترة/بحث
+  // فلترة بحسب الدور + البحث + الحالة
   const filtered = useMemo(() => {
     const qq = q.trim().toLowerCase();
+
     return safeRows.filter((r) => {
       const name = (r[1] ?? "") as string;
       const phone = (r[2] ?? "") as string;
       const address = (r[3] ?? "") as string;
       const device = (r[4] ?? "") as string;
       const issue = (r[5] ?? "") as string;
-      const rawStatus = (r[7] ?? "picked_up") as string;
-      const normalized = normalizeStatus(rawStatus) as StatusKey;
+      const st = normalizeStatus((r[7] ?? "picked_up") as string) as StatusKey;
 
-      // إخفاء كروت معيّنة لـ Kargo
-      if (
-        role === "Kargo" &&
-        (normalized === "canceled" || normalized === "delivered_success")
-      ) {
-        return false;
+      if (isKargo) {
+        if (
+          !(
+            ["pending_picked_up", "repaired_waiting_del"] as StatusKey[]
+          ).includes(st)
+        )
+          return false;
+      } else if (isUsta) {
+        if (
+          !(
+            [
+              "picked_up",
+              "checking",
+              "checked_waiting_ok",
+              "approved_repairing",
+              "repaired_waiting_del",
+            ] as StatusKey[]
+          ).includes(st)
+        )
+          return false;
       }
 
-      const matchStatus = status ? normalized === status : true;
-      if (!qq) return matchStatus;
+      if (status && st !== status) return false;
 
+      if (!qq) return true;
       const haystack =
         `${name} ${phone} ${address} ${device} ${issue}`.toLowerCase();
-      return matchStatus && haystack.includes(qq);
+      return haystack.includes(qq);
     });
-  }, [safeRows, q, status, role]);
+  }, [safeRows, q, status, isKargo, isUsta]);
 
-  // ترتيب
+  // ترتيب: وزن الحالة أولاً (checking أول – لم يبدأ أخير)
   const sorted = useMemo(() => {
     const arr = [...filtered];
-    if (sort === "name_asc") {
-      arr.sort((a, b) =>
-        String(a[1] ?? "").localeCompare(String(b[1] ?? ""), "ar")
-      );
-    } else if (sort === "name_desc") {
-      arr.sort((a, b) =>
-        String(b[1] ?? "").localeCompare(String(a[1] ?? ""), "ar")
-      );
-    } else if (sort === "created_desc" || sort === "created_asc") {
-      arr.sort((a, b) => {
+    arr.sort((a, b) => {
+      const sa = normalizeStatus((a[7] ?? "picked_up") as string) as StatusKey;
+      const sb = normalizeStatus((b[7] ?? "picked_up") as string) as StatusKey;
+      const wa = STATUS_SORT_WEIGHT[sa] ?? 50;
+      const wb = STATUS_SORT_WEIGHT[sb] ?? 50;
+      if (wa !== wb) return wa - wb;
+
+      if (sort === "name_asc" || sort === "name_desc") {
+        const cmp = String(a[1] ?? "").localeCompare(String(b[1] ?? ""), "ar");
+        return sort === "name_asc" ? cmp : -cmp;
+      }
+      if (sort === "created_desc" || sort === "created_asc") {
         const av = parseDMYToEpoch(a[8]);
         const bv = parseDMYToEpoch(b[8]);
         if (av == null || bv == null) return 0;
         return sort === "created_desc" ? bv - av : av - bv;
-      });
-    } else {
-      arr.sort((a, b) => {
-        const av = parseDMYToEpoch(a[9]);
-        const bv = parseDMYToEpoch(b[9]);
-        if (av == null || bv == null) return 0;
-        return sort === "updated_asc" ? av - bv : bv - av;
-      });
-    }
+      }
+      const av = parseDMYToEpoch(a[9]);
+      const bv = parseDMYToEpoch(b[9]);
+      if (av == null || bv == null) return 0;
+      return sort === "updated_asc" ? av - bv : bv - av;
+    });
     return arr;
   }, [filtered, sort]);
+
+  // بطاقات فارغة/خطأ
+  function EmptyCard({ roleKey }: { roleKey: string }) {
+    let title = "لا توجد نتائج للعرض";
+    let desc = "جرّب تعديل الفلاتر أو البحث.";
+    if (roleKey === "kargo") {
+      title = "لا توجد مهام توصيل الآن";
+      desc = "لا توجد طلبات بانتظار الجلب أو بانتظار التسليم حاليًا.";
+    } else if (roleKey === "usta") {
+      title = "لا توجد أجهزة للتصليح الآن";
+      desc = "لا توجد أجهزة جاهزة للفحص أو التصليح حاليًا.";
+    }
+    return (
+      <div className="rounded-2xl bg-white/95 backdrop-blur ring-1 ring-black/5 shadow-xl p-8 text-center">
+        <div className="mx-auto mb-3 h-12 w-12 rounded-2xl bg-slate-100 flex items-center justify-center">
+          <svg
+            viewBox="0 0 24 24"
+            className="h-6 w-6 text-slate-400"
+            aria-hidden="true"
+          >
+            <path
+              fill="currentColor"
+              d="M12 2a5 5 0 0 0-5 5v2H6a2 2 0 0 0-2 2v6h16v-6a2 2 0 0 0-2-2h-1V7a5 5 0 0 0-5-5Zm0 2a3 3 0 0 1 3 3v2H9V7a3 3 0 0 1 3-3Z"
+            />
+          </svg>
+        </div>
+        <h2 className="text-lg font-semibold text-slate-800">{title}</h2>
+        <p className="mt-1 text-slate-600">{desc}</p>
+      </div>
+    );
+  }
+  function ErrorCard({ message }: { message: string }) {
+    return (
+      <div className="rounded-2xl bg-red-50 ring-1 ring-red-200 p-6 text-red-800">
+        <div className="flex items-start gap-3">
+          <svg
+            viewBox="0 0 24 24"
+            className="h-6 w-6 text-red-600"
+            aria-hidden="true"
+          >
+            <path
+              fill="currentColor"
+              d="M1 21h22L12 2 1 21Zm12-3h-2v-2h2v2Zm0-4h-2v-4h2v4Z"
+            />
+          </svg>
+          <div>
+            <div className="font-semibold">حدثت مشكلة تقنية</div>
+            <p className="mt-1 text-sm">
+              {message ||
+                "هناك مشكلة في الاتصال بالإنترنت أو في مصدر البيانات. يرجى المحاولة لاحقًا."}
+            </p>
+          </div>
+        </div>
+      </div>
+    );
+  }
 
   return (
     <main className="relative min-h-screen bg-gradient-to-br from-slate-900 via-slate-800 to-emerald-900">
       <div className="pointer-events-none absolute inset-0 opacity-20 mix-blend-overlay [background-image:radial-gradient(#ffffff22_1px,transparent_1px)] [background-size:16px_16px]" />
-
       <div className="relative z-10 px-4 py-8 max-w-7xl mx-auto">
-        {/* هيدر */}
+        {/* الهيدر */}
         <div className="mb-4 flex items-center justify-between gap-3">
           <div>
             <h1 className="text-2xl md:text-3xl font-bold text-white">
               قائمة العملاء
             </h1>
             <p className="text-slate-300 text-sm md:text-base mt-1">
-              إدارة الطلبات وتحديث الحالات بسرعة.
+              عرض وتحديث الحالات حسب دور المستخدم.
             </p>
           </div>
-          <Link
-            href="/customers/create"
-            className="inline-flex items-center gap-2 px-4 py-2.5 rounded-xl bg-emerald-500 text-white font-medium shadow-lg shadow-emerald-600/20 hover:bg-emerald-600 focus:outline-none focus:ring-4 focus:ring-emerald-300 transition"
-          >
-            <svg viewBox="0 0 24 24" className="h-5 w-5" aria-hidden="true">
-              <path
-                fill="currentColor"
-                d="M12 5c.55 0 1 .45 1 1v5h5a1 1 0 1 1 0 2h-5v5a1 1 0 1 1-2 0v-5H6a1 1 0 1 1 0-2h5V6c0-.55.45-1 1-1Z"
-              />
-            </svg>
-            عميل جديد
-          </Link>
-        </div>
-
-        {/* نجاح */}
-        {successVisible && (
-          <div className="mb-4 rounded-xl border border-emerald-200/60 bg-emerald-50/90 backdrop-blur p-3 text-emerald-800 flex items-center justify-between shadow">
-            <span className="inline-flex items-center gap-2">
-              <svg
-                viewBox="0 0 24 24"
-                className="h-5 w-5 text-emerald-600"
-                aria-hidden="true"
-              >
+          {!(isKargo || isUsta) && (
+            <Link
+              href="/customers/create"
+              className="inline-flex items-center gap-2 px-4 py-2.5 rounded-xl bg-emerald-500 text-white font-medium shadow-lg shadow-emerald-600/20 hover:bg-emerald-600 focus:outline-none focus:ring-4 focus:ring-emerald-300 transition"
+            >
+              <svg viewBox="0 0 24 24" className="h-5 w-5" aria-hidden="true">
                 <path
                   fill="currentColor"
-                  d="M9 16.17 4.83 12l-1.42 1.41L9 19 21 7l-1.41-1.41z"
+                  d="M12 5c.55 0 1 .45 1 1v5h5a1 1 0 1 1 0 2h-5v5a1 1 0 1 1-2 0v-5H6a1 1 0 1 1 0-2h5V6c0-.55.45-1 1-1Z"
                 />
               </svg>
-              تم حفظ التغييرات بنجاح
-            </span>
-            <button
-              onClick={() => setSuccessVisible(false)}
-              className="text-emerald-700 underline decoration-dotted hover:text-emerald-800"
-            >
-              إغلاق
-            </button>
-          </div>
-        )}
+              عميل جديد
+            </Link>
+          )}
+        </div>
 
-        {/* زر فلترة للموبايل + بانل */}
+        {/* أدوات الفلترة (زر على الموبايل) */}
         <div className="mb-3 md:mb-4">
           <div className="md:hidden mb-2">
             <button
@@ -236,12 +309,13 @@ export default function CustomersClient({ rows, showSuccess, role }: Props) {
                     id="q"
                     value={q}
                     onChange={(e) => setQ(e.target.value)}
-                    placeholder="ابحث بالاسم، الهاتف، الجهاز، العطل…"
+                    placeholder="ابحث بالاسم، الجهاز، العطل…"
                     className="w-full rounded-xl border border-slate-300 bg-white px-3 py-2.5 pl-10 text-slate-900 placeholder:text-slate-400 shadow-sm outline-none focus:border-emerald-500 focus:ring-4 focus:ring-emerald-200"
                   />
                   <svg
                     viewBox="0 0 24 24"
                     className="absolute left-3 top-1/2 -translate-y-1/2 h-5 w-5 text-slate-400"
+                    aria-hidden="true"
                   >
                     <path
                       fill="currentColor"
@@ -264,7 +338,7 @@ export default function CustomersClient({ rows, showSuccess, role }: Props) {
                   <option value="">كل الحالات</option>
                   {statusOptions.map((s) => (
                     <option key={s} value={s}>
-                      {labelForStatus(s)}
+                      {ACTION_LABELS[s] ?? s.replaceAll("_", " ")}
                     </option>
                   ))}
                 </select>
@@ -290,56 +364,27 @@ export default function CustomersClient({ rows, showSuccess, role }: Props) {
               </div>
             </div>
 
-            <div className="mt-3 flex items-center justify-between">
-              <div className="text-sm text-slate-600">
-                عرض{" "}
-                <span className="font-medium text-slate-900">
-                  {sorted.length}
-                </span>{" "}
-                من{" "}
-                <span className="font-medium text-slate-900">
-                  {safeRows.length}
-                </span>{" "}
-                عميل
-              </div>
-              <div className="flex items-center gap-2">
-                <button
-                  onClick={() => {
-                    setQ("");
-                    setStatus("");
-                    setSort("updated_desc");
-                  }}
-                  className="inline-flex items-center px-3 py-2 rounded-xl border border-slate-300 bg-white hover:bg-slate-50 text-slate-700"
-                >
-                  مسح
-                </button>
-                <button
-                  onClick={() => setOpenFilters(false)}
-                  className="md:hidden inline-flex items-center px-3 py-2 rounded-xl bg-emerald-600 text-white hover:bg-emerald-700"
-                >
-                  تم
-                </button>
-              </div>
+            <div className="mt-3 text-sm text-slate-600">
+              عرض{" "}
+              <span className="font-medium text-slate-900">
+                {sorted.length}
+              </span>{" "}
+              من{" "}
+              <span className="font-medium text-slate-900">
+                {safeRows.length}
+              </span>{" "}
+              عميل
             </div>
           </div>
         </div>
 
-        {/* المحتوى */}
-        {safeRows.length === 0 ? (
-          <div className="rounded-2xl bg-white/95 backdrop-blur ring-1 ring-black/5 shadow-xl p-8 text-center">
-            <h2 className="text-lg font-semibold text-slate-800">
-              لا يوجد عملاء حتى الآن
-            </h2>
-            <p className="mt-1 text-slate-600">ابدأ بإضافة أول عميل لديك.</p>
-            <Link
-              href="/customers/create"
-              className="mt-4 inline-flex items-center gap-2 px-4 py-2.5 rounded-xl bg-emerald-600 text-white shadow hover:bg-emerald-700"
-            >
-              إضافة عميل
-            </Link>
-          </div>
+        {/* عرض الأخطاء/الفراغ/المحتوى */}
+        {fetchError ? (
+          <ErrorCard message={fetchError} />
+        ) : sorted.length === 0 ? (
+          <EmptyCard roleKey={roleKey} />
         ) : (
-          <CustomerTable rows={sorted} role={role} />
+          <CustomerTable rows={sorted} role={roleKey} />
         )}
       </div>
     </main>
@@ -348,6 +393,9 @@ export default function CustomersClient({ rows, showSuccess, role }: Props) {
 
 /** ======= الكروت للموبايل + الجدول للديسكتوب ======= */
 function CustomerTable({ rows, role }: { rows: Row[]; role?: string }) {
+  const isKargo = role === "kargo";
+  const isUsta = role === "usta";
+
   return (
     <div className="space-y-5">
       {/* Mobile cards */}
@@ -364,16 +412,29 @@ function CustomerTable({ rows, role }: { rows: Row[]; role?: string }) {
           const createdRaw = r[8] ?? "";
           const updatedRaw = r[9] ?? "";
 
-          const normalized = normalizeStatus(rawStatus) as StatusKey;
+          const status = normalizeStatus(rawStatus) as StatusKey;
           const phoneDigits = sanitizePhone(phone);
 
-          // (احتياط) لو وصل صف مخفي لـ Kargo من الأعلى
           if (
-            role === "Kargo" &&
-            (normalized === "canceled" || normalized === "delivered_success")
-          ) {
+            isKargo &&
+            !(
+              ["pending_picked_up", "repaired_waiting_del"] as StatusKey[]
+            ).includes(status)
+          )
             return null;
-          }
+          if (
+            isUsta &&
+            !(
+              [
+                "picked_up",
+                "checking",
+                "checked_waiting_ok",
+                "approved_repairing",
+                "repaired_waiting_del",
+              ] as StatusKey[]
+            ).includes(status)
+          )
+            return null;
 
           return (
             <li
@@ -381,15 +442,19 @@ function CustomerTable({ rows, role }: { rows: Row[]; role?: string }) {
               className="rounded-2xl bg-white/95 backdrop-blur ring-1 ring-black/5 p-4 shadow-md hover:shadow-lg transition border-l-4"
               style={{
                 borderLeftColor:
-                  normalized === "delivered_success"
+                  status === "delivered_success"
                     ? "#10b981"
-                    : normalized === "picked_up"
+                    : status === "picked_up"
                     ? "#3b82f6"
-                    : normalized === "canceled"
+                    : status === "canceled"
                     ? "#ef4444"
-                    : normalized === "approved_repairing" ||
-                      normalized === "checking" ||
-                      normalized === "checked_waiting_ok"
+                    : (
+                        [
+                          "approved_repairing",
+                          "checking",
+                          "checked_waiting_ok",
+                        ] as StatusKey[]
+                      ).includes(status)
                     ? "#f59e0b"
                     : "#cbd5e1",
               }}
@@ -400,34 +465,23 @@ function CustomerTable({ rows, role }: { rows: Row[]; role?: string }) {
                   <div className="text-base font-semibold leading-6 truncate">
                     {name || "—"}
                   </div>
-                  <div className="mt-1 text-sm text-neutral-600">
-                    {phone || "—"}
-                  </div>
+                  {!isUsta && (
+                    <div className="mt-1 text-sm text-neutral-600">
+                      {phone || "—"}
+                    </div>
+                  )}
                 </div>
-                <StatusBadge status={normalized} />
+                <StatusBadge status={status} />
               </div>
 
-              {/* معلومات مختصرة */}
+              {/* مختصر */}
               <div className="mt-3 text-sm">
-                <div className="flex items-center justify-between">
-                  <span className="text-neutral-500">الحالة</span>
-                  <span className="text-neutral-900">
-                    {labelForStatus(normalized)}
-                  </span>
-                </div>
-                <div className="mt-1 flex items-center justify-between">
-                  <span className="text-neutral-500">الجهاز</span>
-                  <span
-                    className="text-neutral-900 max-w-[60%] truncate text-right"
-                    title={device}
-                  >
-                    {device || "—"}
-                  </span>
-                </div>
-                <div className="mt-1 flex items-center justify-between">
-                  <span className="text-neutral-500">التكلفة</span>
-                  <span className="text-neutral-900">{cost || "—"}</span>
-                </div>
+                <InfoRow
+                  label="الحالة"
+                  value={ACTION_LABELS[status] ?? status.replaceAll("_", " ")}
+                />
+                <InfoRow label="الجهاز" value={device || "—"} clamp />
+                <InfoRow label="التكلفة" value={cost || "—"} />
                 <div className="mt-1 flex items-center justify-between">
                   <span className="text-neutral-500">التواريخ</span>
                   <span className="text-neutral-800">
@@ -437,62 +491,86 @@ function CustomerTable({ rows, role }: { rows: Row[]; role?: string }) {
                 </div>
               </div>
 
-              {(address || issue) && (
+              {/* تفاصيل إضافية قابلة للطي — نخفي العنوان عن Usta */}
+              {((!isUsta && address) || issue) && (
                 <details className="group mt-2">
                   <summary className="cursor-pointer select-none text-sm text-emerald-700 hover:text-emerald-800 inline-flex items-center gap-2">
                     عرض التفاصيل
                     <svg
                       viewBox="0 0 24 24"
                       className="h-4 w-4 transition group-open:rotate-180"
+                      aria-hidden="true"
                     >
                       <path fill="currentColor" d="M7 10l5 5 5-5z" />
                     </svg>
                   </summary>
                   <div className="mt-2 space-y-1 text-sm">
-                    <InfoRow label="العنوان" value={address} />
-                    <InfoRow label="العطل" value={issue} />
+                    {!isUsta && (
+                      <InfoRow label="العنوان" value={address || "—"} />
+                    )}
+                    <InfoRow label="العطل" value={issue || "—"} />
                   </div>
                 </details>
               )}
 
-              {/* سطر 1: اتصال / واتساب (واتساب مخفي لـ Kargo) */}
-              <div className="mt-4 flex items-center gap-2">
-                {phoneDigits ? (
-                  <>
-                    <a
-                      href={`tel:${phoneDigits}`}
-                      className="inline-flex items-center gap-2 px-3 py-2 rounded-xl border border-slate-300 bg-white hover:bg-slate-50"
-                      aria-label={`اتصال بـ ${name}`}
-                    >
-                      اتصال
-                    </a>
-
-                    {/* واتساب لكل الأدوار ما عدا Kargo */}
-                    {role !== "Kargo" && (
+              {/* سطر 1: اتصال/واتساب — مخفي بالكامل لـ Usta */}
+              {!isUsta && (
+                <div className="mt-4 flex items-center gap-2">
+                  {phoneDigits ? (
+                    <>
                       <a
-                        href={`https://wa.me/${phoneDigits}`}
-                        target="_blank"
-                        rel="noopener noreferrer"
+                        href={`tel:${phoneDigits}`}
                         className="inline-flex items-center gap-2 px-3 py-2 rounded-xl border border-slate-300 bg-white hover:bg-slate-50"
-                        aria-label={`واتساب ${name}`}
+                        aria-label={`اتصال بـ ${name}`}
                       >
-                        واتساب
+                        اتصال
                       </a>
-                    )}
-                  </>
-                ) : (
-                  <span className="text-xs text-neutral-500">
-                    الهاتف غير متوفر
-                  </span>
-                )}
-              </div>
+                      {/* Kargo بدون واتساب */}
+                      {role !== "kargo" && (
+                        <a
+                          href={`https://wa.me/${phoneDigits}`}
+                          target="_blank"
+                          rel="noopener noreferrer"
+                          className="inline-flex items-center gap-2 px-3 py-2 rounded-xl border border-slate-300 bg-white hover:bg-slate-50"
+                          aria-label={`واتساب ${name}`}
+                        >
+                          واتساب
+                        </a>
+                      )}
+                    </>
+                  ) : (
+                    <span className="text-xs text-neutral-500">
+                      الهاتف غير متوفر
+                    </span>
+                  )}
+                </div>
+              )}
 
-              {/* سطر 2: تغيير الحالة + التفاصيل */}
+              {/* سطر 2: تغيير الحالة + التفاصيل — التفاصيل مخفية لـ Usta */}
               <div className="mt-2 flex items-center justify-between gap-2">
                 <div>
-                  {/* لـ Kargo: اسمح بزر تغيير الحالة فقط إذا كانت الحالة pending_picked_up */}
-                  {role === "Kargo" ? (
-                    normalized === "pending_picked_up" ? (
+                  {isKargo ? (
+                    (
+                      [
+                        "pending_picked_up",
+                        "repaired_waiting_del",
+                      ] as StatusKey[]
+                    ).includes(status) ? (
+                      <NextStatusButton
+                        id={id}
+                        currentStatus={rawStatus}
+                        onConfirm={advanceStatusAction}
+                      />
+                    ) : null
+                  ) : isUsta ? (
+                    (
+                      [
+                        "picked_up",
+                        "checking",
+                        "checked_waiting_ok",
+                        "approved_repairing",
+                      ] as StatusKey[]
+                    ).includes(status) ? (
                       <NextStatusButton
                         id={id}
                         currentStatus={rawStatus}
@@ -500,7 +578,6 @@ function CustomerTable({ rows, role }: { rows: Row[]; role?: string }) {
                       />
                     ) : null
                   ) : (
-                    // باقي الأدوار: الزر دائمًا موجود
                     <NextStatusButton
                       id={id}
                       currentStatus={rawStatus}
@@ -509,13 +586,15 @@ function CustomerTable({ rows, role }: { rows: Row[]; role?: string }) {
                   )}
                 </div>
 
-                <Link
-                  href={`/customers/${id}`}
-                  className="inline-flex items-center gap-2 px-3 py-2 rounded-xl border border-neutral-300 bg-white hover:bg-neutral-50"
-                  aria-label={`فتح تفاصيل ${name}`}
-                >
-                  التفاصيل
-                </Link>
+                {!isUsta && (
+                  <Link
+                    href={`/customers/${id}`}
+                    className="inline-flex items-center gap-2 px-3 py-2 rounded-xl border border-neutral-300 bg-white hover:bg-neutral-50"
+                    aria-label={`فتح تفاصيل ${name}`}
+                  >
+                    التفاصيل
+                  </Link>
+                )}
               </div>
             </li>
           );
@@ -529,8 +608,8 @@ function CustomerTable({ rows, role }: { rows: Row[]; role?: string }) {
             <thead className="bg-neutral-50 sticky top-0 z-10">
               <tr className="text-left text-neutral-700">
                 <th className="p-3 font-semibold">العميل</th>
-                <th className="p-3 font-semibold">الهاتف</th>
-                <th className="p-3 font-semibold">العنوان</th>
+                {!isUsta && <th className="p-3 font-semibold">الهاتف</th>}
+                {!isUsta && <th className="p-3 font-semibold">العنوان</th>}
                 <th className="p-3 font-semibold">الجهاز</th>
                 <th className="p-3 font-semibold">العطل</th>
                 <th className="p-3 font-semibold">التكلفة</th>
@@ -542,7 +621,7 @@ function CustomerTable({ rows, role }: { rows: Row[]; role?: string }) {
                   آخر تحديث
                 </th>
                 <th className="p-3"></th>
-                <th className="p-3"></th>
+                {!isUsta && <th className="p-3"></th>}
               </tr>
             </thead>
             <tbody>
@@ -557,16 +636,28 @@ function CustomerTable({ rows, role }: { rows: Row[]; role?: string }) {
                 const rawStatus = (r[7] ?? "picked_up") as string;
                 const createdRaw = r[8] ?? "";
                 const updatedRaw = r[9] ?? "";
-                const normalized = normalizeStatus(rawStatus) as StatusKey;
+                const status = normalizeStatus(rawStatus) as StatusKey;
 
-                // إخفاء صفوف لـ Kargo (نفس منطق الموبايل)
                 if (
-                  role === "Kargo" &&
-                  (normalized === "canceled" ||
-                    normalized === "delivered_success")
-                ) {
+                  isKargo &&
+                  !(
+                    ["pending_picked_up", "repaired_waiting_del"] as StatusKey[]
+                  ).includes(status)
+                )
                   return null;
-                }
+                if (
+                  isUsta &&
+                  !(
+                    [
+                      "picked_up",
+                      "checking",
+                      "checked_waiting_ok",
+                      "approved_repairing",
+                      "repaired_waiting_del",
+                    ] as StatusKey[]
+                  ).includes(status)
+                )
+                  return null;
 
                 return (
                   <tr key={id} className="border-t hover:bg-neutral-50">
@@ -576,13 +667,17 @@ function CustomerTable({ rows, role }: { rows: Row[]; role?: string }) {
                     >
                       {name}
                     </td>
-                    <td className="p-3 whitespace-nowrap">{phone}</td>
-                    <td
-                      className="p-3 max-w-[320px] truncate"
-                      title={String(address)}
-                    >
-                      {address}
-                    </td>
+                    {!isUsta && (
+                      <td className="p-3 whitespace-nowrap">{phone}</td>
+                    )}
+                    {!isUsta && (
+                      <td
+                        className="p-3 max-w-[320px] truncate"
+                        title={String(address)}
+                      >
+                        {address}
+                      </td>
+                    )}
                     <td
                       className="p-3 max-w-[220px] truncate"
                       title={String(device)}
@@ -597,7 +692,7 @@ function CustomerTable({ rows, role }: { rows: Row[]; role?: string }) {
                     </td>
                     <td className="p-3">{cost || "—"}</td>
                     <td className="p-3">
-                      <StatusBadge status={normalized} />
+                      <StatusBadge status={status} />
                     </td>
                     <td className="p-3 whitespace-nowrap">
                       {formatSheetDate(createdRaw)}
@@ -606,9 +701,28 @@ function CustomerTable({ rows, role }: { rows: Row[]; role?: string }) {
                       {formatSheetDate(updatedRaw)}
                     </td>
                     <td className="p-3">
-                      {/* لـ Kargo: حصر الزر بحالة واحدة */}
-                      {role === "Kargo" ? (
-                        normalized === "pending_picked_up" && (
+                      {isKargo ? (
+                        (
+                          [
+                            "pending_picked_up",
+                            "repaired_waiting_del",
+                          ] as StatusKey[]
+                        ).includes(status) && (
+                          <NextStatusButton
+                            id={id}
+                            currentStatus={rawStatus}
+                            onConfirm={advanceStatusAction}
+                          />
+                        )
+                      ) : isUsta ? (
+                        (
+                          [
+                            "picked_up",
+                            "checking",
+                            "checked_waiting_ok",
+                            "approved_repairing",
+                          ] as StatusKey[]
+                        ).includes(status) && (
                           <NextStatusButton
                             id={id}
                             currentStatus={rawStatus}
@@ -623,20 +737,26 @@ function CustomerTable({ rows, role }: { rows: Row[]; role?: string }) {
                         />
                       )}
                     </td>
-                    <td className="p-3 text-right">
-                      <Link
-                        className="inline-flex items-center gap-1 text-emerald-700 hover:text-emerald-800 underline decoration-dotted"
-                        href={`/customers/${id}`}
-                      >
-                        فتح
-                        <svg viewBox="0 0 24 24" className="h-4 w-4">
-                          <path
-                            fill="currentColor"
-                            d="M13 5l7 7-7 7v-4H4v-6h9V5z"
-                          />
-                        </svg>
-                      </Link>
-                    </td>
+                    {!isUsta && (
+                      <td className="p-3 text-right">
+                        <Link
+                          className="inline-flex items-center gap-1 text-emerald-700 hover:text-emerald-800 underline decoration-dotted"
+                          href={`/customers/${id}`}
+                        >
+                          فتح
+                          <svg
+                            viewBox="0 0 24 24"
+                            className="h-4 w-4"
+                            aria-hidden="true"
+                          >
+                            <path
+                              fill="currentColor"
+                              d="M13 5l7 7-7 7v-4H4v-6h9V5z"
+                            />
+                          </svg>
+                        </Link>
+                      </td>
+                    )}
                   </tr>
                 );
               })}
@@ -648,11 +768,23 @@ function CustomerTable({ rows, role }: { rows: Row[]; role?: string }) {
   );
 }
 
-function InfoRow({ label, value }: { label: string; value: string }) {
+function InfoRow({
+  label,
+  value,
+  clamp = false,
+}: {
+  label: string;
+  value: string;
+  clamp?: boolean;
+}) {
   return (
     <div className="flex items-start justify-between gap-3">
       <span className="text-neutral-500">{label}</span>
-      <span className="text-neutral-900 text-right">{value || "—"}</span>
+      <span
+        className={`text-neutral-900 text-right ${clamp ? "line-clamp-2" : ""}`}
+      >
+        {value || "—"}
+      </span>
     </div>
   );
 }

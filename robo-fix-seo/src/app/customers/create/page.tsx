@@ -1,3 +1,6 @@
+// app/customers/create/page.tsx
+export const runtime = "nodejs";
+
 import CustomerForm from "../CustomerForm";
 
 export const metadata = { title: "Robonarim | إنشاء عميل" };

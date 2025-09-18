@@ -8,13 +8,13 @@ type NextPageProps = {
   searchParams?: Promise<Record<string, string | string[] | undefined>>;
 };
 
-// استخراج الدور من الكوكي (مشفّر base64url قبل التوقيع)
 function decodeRoleFromCookie(token?: string): string | undefined {
   if (!token) return undefined;
   try {
     const [base] = token.split(".");
     if (!base) return undefined;
-    const json = JSON.parse(Buffer.from(base, "base64").toString("utf-8"));
+    // مهم: الترميز base64url وليس base64 العادي
+    const json = JSON.parse(Buffer.from(base, "base64url").toString("utf-8"));
     return typeof json?.role === "string" ? json.role : undefined;
   } catch {
     return undefined;
@@ -26,16 +26,28 @@ export default async function Page({ searchParams }: NextPageProps) {
   const updatedParam = Array.isArray(sp.updated) ? sp.updated[0] : sp.updated;
   const showSuccess = updatedParam === "1";
 
-  const { rows } = await readAll();
+  let rows: any[] = [];
+  let fetchError: string | undefined;
+
+  try {
+    const res = await readAll();
+    rows = Array.isArray(res?.rows) ? res.rows : [];
+  } catch (err: any) {
+    console.error("Failed to read rows:", err);
+    // رسالة مختصرة ترسل للعميل؛ التفاصيل تُسجّل في السيرفر فقط
+    fetchError = "تعذر تحميل البيانات بسبب مشكلة في الشبكة أو مصدر البيانات.";
+  }
+
   const cookieStore = await cookies();
   const sess = cookieStore.get("robosess")?.value;
-  const role = decodeRoleFromCookie(sess); // "Kargo" | "Admin" | "Usta" | "call-center" | ...
+  const role = decodeRoleFromCookie(sess); // مثل: "Kargo" | "Usta" | "Admin" ...
 
   return (
     <CustomersClient
-      rows={Array.isArray(rows) ? rows : []}
+      rows={rows}
       showSuccess={showSuccess}
       role={role}
+      fetchError={fetchError}
     />
   );
 }
