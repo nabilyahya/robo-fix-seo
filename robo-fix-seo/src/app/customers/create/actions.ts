@@ -83,11 +83,22 @@ async function htmlToPdfBuffer(html: string): Promise<Buffer> {
   if (isServerless) {
     const exePath = await chromium.executablePath();
     log("chromium path (serverless)", { hasPath: !!exePath });
+
     launchOptions = {
-      args: chromium.args,
+      args: [
+        ...chromium.args,
+        "--no-sandbox",
+        "--disable-setuid-sandbox",
+        "--disable-dev-shm-usage",
+        "--single-process",
+        "--no-zygote",
+        "--disable-gpu",
+        "--use-gl=swiftshader",
+      ],
       defaultViewport: chromium.defaultViewport,
       executablePath: exePath,
       headless: chromium.headless,
+      ignoreHTTPSErrors: true,
     };
   } else {
     let executablePath = process.env.PUPPETEER_EXECUTABLE_PATH;
@@ -292,7 +303,7 @@ export async function createCustomer(formData: FormData) {
   const repairCost = String(formData.get("repairCost") || "").trim();
   const whatsappOptIn = String(formData.get("whatsappOptIn") || "") === "on";
 
-  // الحقول الجديدة:
+  // حقول اختيارية
   const deviceSN = String(formData.get("deviceSN") || "").trim();
   const deviceAccessories = String(
     formData.get("deviceAccessories") || ""
@@ -327,24 +338,24 @@ export async function createCustomer(formData: FormData) {
   // 3) status
   const status = normalizeStatus(INITIAL_STATUS);
 
-  // 4) save to Sheets (بدون إضافة أعمدة جديدة)
+  // 4) save to Sheets (A..L)
   await appendCustomerRow12([
-    id,
-    name,
-    phone,
-    address,
-    deviceType,
-    issue,
-    repairCost,
-    status,
-    nowISO,
-    nowISO,
-    publicId,
-    passCode,
+    id, // A
+    name, // B
+    phone, // C
+    address, // D
+    deviceType, // E
+    issue, // F
+    repairCost, // G
+    status, // H
+    nowISO, // I
+    nowISO, // J
+    publicId, // K
+    passCode, // L
   ]);
   log("sheet appended", { id, publicId });
 
-  // 5) HTML -> PDF -> Drive (القالب الجديد + الشعار من public/)
+  // 5) HTML -> PDF -> Drive
   const base = siteBaseUrl();
   const trackUrl = buildTrackUrl(publicId);
   const html = buildTeslimatHTML({
@@ -376,14 +387,14 @@ export async function createCustomer(formData: FormData) {
     pdfViewUrl = up.viewUrl;
     pdfFileId = up.fileId;
 
-    // ✅ تحديث العمود M برابط التحميل المباشر
+    // ✅ تحديث العمود M برابط التحميل
     if (pdfDirectUrl) {
       const { rowIndex } = await findRowByPublicId(publicId);
       if (rowIndex > 0) {
         await updateCells(`${SHEET_NAME}!M${rowIndex}:M${rowIndex}`, [
           [pdfDirectUrl],
         ]);
-        log("sheet M updated", { rowIndex });
+        log("sheet M updated", { rowIndex, pdfDirectUrl });
       } else {
         log("sheet M skipped: publicId not found", { publicId });
       }
@@ -393,7 +404,7 @@ export async function createCustomer(formData: FormData) {
     // نكمل بدون PDF
   }
 
-  // 6) WhatsApp notify (optional)
+  // 6) WhatsApp notify (اختياري)
   const notifyPhone = process.env.WHATSAPP_TARGET_PHONE || "";
   if (notifyPhone) {
     const msg =
