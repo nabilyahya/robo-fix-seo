@@ -2,7 +2,6 @@
 "use server";
 
 import fs from "node:fs";
-import path from "node:path";
 import { PassThrough } from "node:stream";
 import { normalizeStatus } from "@/components/StatusBadge";
 import {
@@ -14,10 +13,9 @@ import {
   SHEET_NAME,
 } from "@/lib/sheets";
 import { sendWhatsAppText } from "@/lib/whatsapp";
-import { buildTeslimatHTML } from "@/templates/teslimat";
-import chromium from "@sparticuz/chromium";
-import puppeteer from "puppeteer-core";
+
 import { google } from "googleapis";
+import { renderReceiptPdfBuffer } from "@/templates/receipt-pdf";
 
 /* ============================
    Logs
@@ -71,149 +69,6 @@ async function genUniqueReceiptNo(): Promise<string> {
 }
 
 /* ============================
-   HTML -> PDF (Chromium سيرفرلس/محلي)
-============================ */
-async function htmlToPdfBuffer(html: string): Promise<Buffer> {
-  const isServerless =
-    !!process.env.VERCEL ||
-    !!process.env.AWS_REGION ||
-    !!process.env.LAMBDA_TASK_ROOT;
-
-  let launchOptions: any;
-
-  if (isServerless) {
-    // يفضَّل تفعيل الهيدلس وإطفاء الجرافيكس في بيئات سيرفرلس
-    (chromium as any).setHeadlessMode = true;
-    (chromium as any).setGraphicsMode = false;
-
-    const exePath = await chromium.executablePath();
-    const exeDir = exePath ? path.dirname(exePath) : "/tmp";
-
-    // نحاول تضمين كل المسارات المحتملة للمكتبات .so على Vercel
-    const nm = path.join(
-      process.cwd(),
-      "node_modules",
-      "@sparticuz",
-      "chromium"
-    );
-    const candidates = [
-      exeDir,
-      path.join(exeDir, "swiftshader"),
-      nm,
-      path.join(nm, "lib"),
-      path.join(nm, "swiftshader"),
-      // مسار وقت التشغيل على Vercel:
-      "/var/task/node_modules/@sparticuz/chromium",
-      "/var/task/node_modules/@sparticuz/chromium/lib",
-      "/var/task/node_modules/@sparticuz/chromium/swiftshader",
-      "/tmp", // أحيانًا تُفك الحِزم هنا
-    ];
-    const existing = (process.env.LD_LIBRARY_PATH || "")
-      .split(":")
-      .filter(Boolean);
-    const libPath = Array.from(new Set([...candidates, ...existing])).join(":");
-    process.env.LD_LIBRARY_PATH = libPath;
-    process.env.FONTCONFIG_PATH = process.env.FONTCONFIG_PATH || exeDir;
-    process.env.HOME = process.env.HOME || "/tmp";
-
-    // Logs مفيدة للتشخيص لو استمر الخطأ
-    const checkFiles = ["libnspr4.so", "libnss3.so"].map((f) => {
-      const found = candidates.some((d) => {
-        try {
-          return fs.existsSync(path.join(d, f));
-        } catch {
-          return false;
-        }
-      });
-      return { f, found };
-    });
-    log("serverless chromium setup", {
-      exePath,
-      LD_LIBRARY_PATH: process.env.LD_LIBRARY_PATH,
-      checks: checkFiles,
-    });
-
-    launchOptions = {
-      args: [
-        ...chromium.args,
-        "--no-sandbox",
-        "--disable-setuid-sandbox",
-        "--disable-dev-shm-usage",
-        "--disable-gpu",
-        "--single-process",
-        "--no-zygote",
-        "--font-render-hinting=none",
-      ],
-      defaultViewport: chromium.defaultViewport,
-      executablePath: exePath,
-      headless: chromium.headless,
-      ignoreHTTPSErrors: true,
-    };
-  } else {
-    // محليًا: استخدم Chrome/Edge المثبّت أو Puppeteer الكامل إن وجد
-    let executablePath = process.env.PUPPETEER_EXECUTABLE_PATH;
-
-    if (!executablePath) {
-      try {
-        const puppeteerFull: any = await import("puppeteer");
-        executablePath = puppeteerFull.executablePath();
-        log("local chrome from puppeteer", { path: executablePath });
-      } catch {
-        const candidates = [
-          "C:\\Program Files\\Google\\Chrome\\Application\\chrome.exe",
-          "C:\\Program Files (x86)\\Google\\Chrome\\Application\\chrome.exe",
-          "C:\\Program Files\\Microsoft\\Edge\\Application\\msedge.exe",
-          "C:\\Program Files (x86)\\Microsoft\\Edge\\Application\\msedge.exe",
-          "/Applications/Google Chrome.app/Contents/MacOS/Google Chrome",
-          "/Applications/Microsoft Edge.app/Contents/MacOS/Microsoft Edge",
-          "/usr/bin/google-chrome",
-          "/usr/bin/chromium-browser",
-          "/usr/bin/chromium",
-        ];
-        executablePath = candidates.find((p) => {
-          try {
-            return fs.existsSync(p);
-          } catch {
-            return false;
-          }
-        });
-        log("local chrome from candidates", { path: executablePath });
-      }
-    }
-
-    if (!executablePath) {
-      throw new Error(
-        "لم يتم العثور على Chrome/Edge محليًا. ثبّت Google Chrome/Edge أو عرّف المتغير PUPPETEER_EXECUTABLE_PATH."
-      );
-    }
-
-    launchOptions = {
-      executablePath,
-      headless: true,
-      args: ["--disable-dev-shm-usage"],
-    };
-  }
-
-  const browser = await puppeteer.launch(launchOptions);
-  log("puppeteer launched", { serverless: isServerless });
-
-  try {
-    const page = await browser.newPage();
-    await page.setContent(html, { waitUntil: "networkidle0" });
-    const pdf = await page.pdf({
-      format: "A4",
-      printBackground: true,
-      margin: { top: "18mm", bottom: "18mm", left: "18mm", right: "18mm" },
-    });
-    log("pdf generated", { bytes: pdf.length });
-    return Buffer.from(pdf);
-  } finally {
-    await browser.close();
-    log("puppeteer closed");
-  }
-}
-
-/* ============================
    Google Drive auth
 ============================ */
 function loadServiceAccountJSON(): any {
@@ -258,13 +113,14 @@ function getDriveClient() {
   return google.drive({ version: "v3", auth });
 }
 
-// كل محاولة تحتاج Stream جديد
+// googleapis يتوقع Stream في media.body
 function bufferToStream(buf: Buffer) {
-  const s = new PassThrough();
-  s.end(buf);
-  return s;
+  const stream = new PassThrough();
+  stream.end(buf);
+  return stream;
 }
 
+// إعادة المحاولة على أخطاء الشبكة
 async function uploadWithRetry<T>(
   fn: () => Promise<T>,
   label: string,
@@ -293,12 +149,17 @@ async function uploadPdfToDrive(
   pdfBuffer: Buffer
 ): Promise<{ fileId: string; viewUrl: string; directUrl: string }> {
   const drive = getDriveClient();
-  const folderId = process.env.GOOGLE_DRIVE_FOLDER_ID;
 
+  const folderId = process.env.GOOGLE_DRIVE_FOLDER_ID; // اختياري
   const fileMeta: any = {
     name: fileName,
     mimeType: "application/pdf",
     ...(folderId ? { parents: [folderId] } : {}),
+  };
+
+  const media = {
+    mimeType: "application/pdf",
+    body: bufferToStream(pdfBuffer),
   };
 
   log("drive uploading", { fileName, size: pdfBuffer.length });
@@ -307,7 +168,7 @@ async function uploadPdfToDrive(
     () =>
       drive.files.create({
         requestBody: fileMeta,
-        media: { mimeType: "application/pdf", body: bufferToStream(pdfBuffer) },
+        media,
         uploadType: "multipart",
         fields: "id, webViewLink, webContentLink",
       }),
@@ -348,7 +209,7 @@ export async function createCustomer(formData: FormData) {
   const repairCost = String(formData.get("repairCost") || "").trim();
   const whatsappOptIn = String(formData.get("whatsappOptIn") || "") === "on";
 
-  // حقول اختيارية
+  // اختياري
   const deviceSN = String(formData.get("deviceSN") || "").trim();
   const deviceAccessories = String(
     formData.get("deviceAccessories") || ""
@@ -383,7 +244,7 @@ export async function createCustomer(formData: FormData) {
   // 3) status
   const status = normalizeStatus(INITIAL_STATUS);
 
-  // 4) save to Sheets
+  // 4) save to Sheets (A..L)
   await appendCustomerRow12([
     id, // A
     name, // B
@@ -400,39 +261,38 @@ export async function createCustomer(formData: FormData) {
   ]);
   log("sheet appended", { id, publicId });
 
-  // 5) HTML -> PDF -> Drive
+  // 5) PDF (React-PDF) -> Drive
   const base = siteBaseUrl();
   const trackUrl = buildTrackUrl(publicId);
-  const html = buildTeslimatHTML({
-    receiptNo: publicId,
-    dateStr: dateHuman,
-    name,
-    phone,
-    address,
-    deviceType,
-    issue,
-    trackUrl,
-    passCode,
-    companyName: "Robonarim",
-    logoUrl: `${base}/logo_square.jpg`,
-    assetsBaseUrl: base,
-    deviceSN,
-    deviceAccessories,
-  });
 
   let pdfDirectUrl: string | null = null;
   let pdfViewUrl: string | null = null;
   let pdfFileId: string | null = null;
 
   try {
-    const pdfBuffer = await htmlToPdfBuffer(html);
+    const pdfBuffer = await renderReceiptPdfBuffer({
+      receiptNo: publicId,
+      dateStr: dateHuman,
+      name,
+      phone,
+      address,
+      deviceType,
+      issue,
+      companyName: "Robonarim",
+      logoUrl: `${base}/logo_square.jpg`,
+      deviceSN,
+      deviceAccessories,
+    });
+
+    log("pdf generated", { bytes: pdfBuffer.length });
+
     const fileName = `Teslimat-Fisi_${publicId}.pdf`;
     const up = await uploadPdfToDrive(fileName, pdfBuffer);
     pdfDirectUrl = up.directUrl;
     pdfViewUrl = up.viewUrl;
     pdfFileId = up.fileId;
 
-    // عمود M: رابط التحميل المباشر
+    // ✅ تحديث العمود M برابط التحميل
     if (pdfDirectUrl) {
       const { rowIndex } = await findRowByPublicId(publicId);
       if (rowIndex > 0) {
