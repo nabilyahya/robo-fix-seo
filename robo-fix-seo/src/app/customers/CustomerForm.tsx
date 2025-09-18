@@ -61,15 +61,31 @@ export default function CustomerForm() {
           />
           <input
             name="deviceType"
-            placeholder="نوع الجهاز"
+            placeholder="نوع الجهاز / الموديل"
             className="input"
             required
           />
           <input name="issue" placeholder="العطل" className="input" required />
+
+          {/* الرقم التسلسلي (اختياري) */}
+          <input
+            name="deviceSN"
+            placeholder="الرقم التسلسلي (اختياري)"
+            className="input"
+          />
+
+          {/* الملحقات (select) */}
+          <select name="deviceAccessories" className="input">
+            <option value="">لا شيء</option>
+            <option value="Şarj istasyonu ve kablo">
+              Şarj istasyonu ve kablo
+            </option>
+          </select>
+
           <input
             name="repairCost"
-            placeholder="تكلفة الصيانة (اختياري)"
-            className="input"
+            placeholder="التكلفة التقديرية (اختياري)"
+            className="input md:col-span-2"
           />
         </div>
 

@@ -8,6 +8,9 @@ import {
   appendCustomerRow12,
   getNextNumericId,
   isValueUsed,
+  findRowByPublicId,
+  updateCells,
+  SHEET_NAME,
 } from "@/lib/sheets";
 import { sendWhatsAppText } from "@/lib/whatsapp";
 import { buildTeslimatHTML } from "@/templates/teslimat";
@@ -150,8 +153,6 @@ async function htmlToPdfBuffer(html: string): Promise<Buffer> {
 
 /* ============================
    Google Drive auth
-   - OAuth (يوصي به) إن وُجدت ENV
-   - Fallback: Service Account
 ============================ */
 function loadServiceAccountJSON(): any {
   const inline = process.env.GOOGLE_SERVICE_ACCOUNT_KEY;
@@ -202,7 +203,7 @@ function bufferToStream(buf: Buffer) {
   return stream;
 }
 
-// محاولة مع إعادة المحاولة على أخطاء الشبكة (ECONNRESET ...)
+// إعادة المحاولة على أخطاء الشبكة
 async function uploadWithRetry<T>(
   fn: () => Promise<T>,
   label: string,
@@ -291,6 +292,12 @@ export async function createCustomer(formData: FormData) {
   const repairCost = String(formData.get("repairCost") || "").trim();
   const whatsappOptIn = String(formData.get("whatsappOptIn") || "") === "on";
 
+  // الحقول الجديدة:
+  const deviceSN = String(formData.get("deviceSN") || "").trim();
+  const deviceAccessories = String(
+    formData.get("deviceAccessories") || ""
+  ).trim();
+
   log("form read", {
     hasName: !!name,
     hasPhone: !!phone,
@@ -299,6 +306,8 @@ export async function createCustomer(formData: FormData) {
     hasIssue: !!issue,
     hasRepairCost: repairCost !== "",
     whatsappOptIn,
+    hasSN: !!deviceSN,
+    accessories: deviceAccessories || "(none)",
   });
 
   // 2) ids
@@ -318,7 +327,7 @@ export async function createCustomer(formData: FormData) {
   // 3) status
   const status = normalizeStatus(INITIAL_STATUS);
 
-  // 4) save to Sheets
+  // 4) save to Sheets (بدون إضافة أعمدة جديدة)
   await appendCustomerRow12([
     id,
     name,
@@ -349,13 +358,10 @@ export async function createCustomer(formData: FormData) {
     trackUrl,
     passCode,
     companyName: "Robonarim",
-    // 👇 الشعار من مجلد public
     logoUrl: `${base}/logo_square.jpg`,
-    // 👇 يضبط المسارات النسبية داخل القالب إن استخدمتها
     assetsBaseUrl: base,
-    // (اختياري) إن صار عندك رقم تسلسلي/اكسسوارات في النموذج:
-    // deviceSN: String(formData.get("deviceSN") || ""),
-    // deviceAccessories: String(formData.get("deviceAccessories") || ""),
+    deviceSN,
+    deviceAccessories,
   });
 
   let pdfDirectUrl: string | null = null;
@@ -369,6 +375,19 @@ export async function createCustomer(formData: FormData) {
     pdfDirectUrl = up.directUrl;
     pdfViewUrl = up.viewUrl;
     pdfFileId = up.fileId;
+
+    // ✅ تحديث العمود M برابط التحميل المباشر
+    if (pdfDirectUrl) {
+      const { rowIndex } = await findRowByPublicId(publicId);
+      if (rowIndex > 0) {
+        await updateCells(`${SHEET_NAME}!M${rowIndex}:M${rowIndex}`, [
+          [pdfDirectUrl],
+        ]);
+        log("sheet M updated", { rowIndex });
+      } else {
+        log("sheet M skipped: publicId not found", { publicId });
+      }
+    }
   } catch (e) {
     logError("PDF/Drive error", e);
     // نكمل بدون PDF

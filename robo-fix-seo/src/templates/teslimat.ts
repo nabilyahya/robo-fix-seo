@@ -1,7 +1,7 @@
 // src/templates/teslimat.ts
 export type TeslimatData = {
   receiptNo: string; // RN-YYYY-2xxxxx
-  dateStr: string; // 2025-09-14 (أو TR locale)
+  dateStr: string; // 2025-09-14 (TR locale)
   name: string;
   phone: string;
   address: string;
@@ -14,12 +14,12 @@ export type TeslimatData = {
 
   // أصول/شعار
   logoUrl?: string; // مثال: https://site.com/logo_square.jpg (من public)
-  logoDataUrl?: string; // بديل Base64 إن رغبت
+  logoDataUrl?: string; // بديل Base64 لو رغبت
   assetsBaseUrl?: string; // لو استخدمت مسارات نسبية أخرى داخل القالب
 
-  // حقول اختيارية إضافية إن وُجدت لاحقًا
-  deviceSN?: string; // Seri No
-  deviceAccessories?: string; // Teslim Alınan Aksesuarlar
+  // حقول اختيارية إضافية
+  deviceSN?: string; // Seri No (اختياري)
+  deviceAccessories?: string; // Teslim Alınan Aksesuarlar (select)
 };
 
 export function buildTeslimatHTML(d: TeslimatData) {
@@ -133,18 +133,12 @@ tfoot td { padding:10px; border:1px solid var(--line); font-weight:700 }
 
 .notice { padding:10px 12px; border-radius:10px; background:linear-gradient(135deg,#fff,#f7fcff); border:1px solid var(--line); font-size:12px; color:var(--muted) }
 
-/* Toolbar (غير مستخدمة هنا لكن تُترك للاتساق) */
-.toolbar { position:sticky; top:0; inset-inline:0; display:flex; gap:8px; justify-content:center; padding:8px; background:rgba(248,251,255,0.65); backdrop-filter:saturate(140%) blur(8px); border-bottom:1px solid #e9f0f7; z-index:10 }
-.btn { cursor:pointer; border:1px solid var(--line); background:#fff; padding:8px 12px; border-radius:10px; font-weight:600 }
-.btn.primary { background:linear-gradient(135deg,var(--brand),var(--accent)); color:#fff; border:none }
-
 /* طباعة */
 @media print {
   @page { size: A4; margin: 0 }
   html, body { background:#fff; height:auto }
   .page { width:210mm; height:297mm; margin:0; box-shadow:none; border-radius:0; page-break-inside:avoid; break-inside:avoid-page }
   .page:not(:last-of-type){ page-break-after:always; break-after:page }
-  /* Single-page helpers */
   body.print-single .page { display:none !important }
   body.print-receipt #receipt { display:block !important }
   body.print-single #receipt {
