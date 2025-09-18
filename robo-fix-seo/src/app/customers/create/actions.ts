@@ -82,23 +82,56 @@ async function htmlToPdfBuffer(html: string): Promise<Buffer> {
   let launchOptions: any;
 
   if (isServerless) {
-    // Sparticuz Chromium for serverless
-    // (مهم) فعّل الهيدلس وخفّض الجرافيكس
-    chromium.setHeadlessMode = true as any;
-    chromium.setGraphicsMode = false as any;
+    // يفضَّل تفعيل الهيدلس وإطفاء الجرافيكس في بيئات سيرفرلس
+    (chromium as any).setHeadlessMode = true;
+    (chromium as any).setGraphicsMode = false;
 
     const exePath = await chromium.executablePath();
-    log("chromium path (serverless)", { exePath });
+    const exeDir = exePath ? path.dirname(exePath) : "/tmp";
 
-    // (الحل الأساسي) وجّه اللودر إلى مكتبات .so المرافقة
-    if (exePath) {
-      const libDir = path.dirname(exePath);
-      process.env.LD_LIBRARY_PATH = [libDir, process.env.LD_LIBRARY_PATH || ""]
-        .filter(Boolean)
-        .join(":");
-      process.env.FONTCONFIG_PATH = process.env.FONTCONFIG_PATH || libDir;
-      process.env.HOME = process.env.HOME || "/tmp"; // لبعض أنظمة الخطوط
-    }
+    // نحاول تضمين كل المسارات المحتملة للمكتبات .so على Vercel
+    const nm = path.join(
+      process.cwd(),
+      "node_modules",
+      "@sparticuz",
+      "chromium"
+    );
+    const candidates = [
+      exeDir,
+      path.join(exeDir, "swiftshader"),
+      nm,
+      path.join(nm, "lib"),
+      path.join(nm, "swiftshader"),
+      // مسار وقت التشغيل على Vercel:
+      "/var/task/node_modules/@sparticuz/chromium",
+      "/var/task/node_modules/@sparticuz/chromium/lib",
+      "/var/task/node_modules/@sparticuz/chromium/swiftshader",
+      "/tmp", // أحيانًا تُفك الحِزم هنا
+    ];
+    const existing = (process.env.LD_LIBRARY_PATH || "")
+      .split(":")
+      .filter(Boolean);
+    const libPath = Array.from(new Set([...candidates, ...existing])).join(":");
+    process.env.LD_LIBRARY_PATH = libPath;
+    process.env.FONTCONFIG_PATH = process.env.FONTCONFIG_PATH || exeDir;
+    process.env.HOME = process.env.HOME || "/tmp";
+
+    // Logs مفيدة للتشخيص لو استمر الخطأ
+    const checkFiles = ["libnspr4.so", "libnss3.so"].map((f) => {
+      const found = candidates.some((d) => {
+        try {
+          return fs.existsSync(path.join(d, f));
+        } catch {
+          return false;
+        }
+      });
+      return { f, found };
+    });
+    log("serverless chromium setup", {
+      exePath,
+      LD_LIBRARY_PATH: process.env.LD_LIBRARY_PATH,
+      checks: checkFiles,
+    });
 
     launchOptions = {
       args: [
@@ -122,7 +155,6 @@ async function htmlToPdfBuffer(html: string): Promise<Buffer> {
 
     if (!executablePath) {
       try {
-        // نستدعي puppeteer العادي ديناميكيًا لو موجود (اختياري)
         const puppeteerFull: any = await import("puppeteer");
         executablePath = puppeteerFull.executablePath();
         log("local chrome from puppeteer", { path: executablePath });
@@ -226,13 +258,13 @@ function getDriveClient() {
   return google.drive({ version: "v3", auth });
 }
 
+// كل محاولة تحتاج Stream جديد
 function bufferToStream(buf: Buffer) {
   const s = new PassThrough();
   s.end(buf);
   return s;
 }
 
-// Retry helper
 async function uploadWithRetry<T>(
   fn: () => Promise<T>,
   label: string,
@@ -271,7 +303,6 @@ async function uploadPdfToDrive(
 
   log("drive uploading", { fileName, size: pdfBuffer.length });
 
-  // (مهم) كل محاولة لازم تستخدم Stream جديد
   const createRes = await uploadWithRetry(
     () =>
       drive.files.create({
