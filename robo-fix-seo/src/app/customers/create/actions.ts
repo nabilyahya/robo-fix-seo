@@ -2,6 +2,7 @@
 "use server";
 
 import fs from "node:fs";
+import path from "node:path";
 import { PassThrough } from "node:stream";
 import { normalizeStatus } from "@/components/StatusBadge";
 import {
@@ -81,8 +82,20 @@ async function htmlToPdfBuffer(html: string): Promise<Buffer> {
   let launchOptions: any;
 
   if (isServerless) {
+    // ===== Serverless (Vercel/AWS) =====
     const exePath = await chromium.executablePath();
-    log("chromium path (serverless)", { hasPath: !!exePath });
+    log("chromium path (serverless)", { hasPath: !!exePath, exePath });
+
+    // ساعد المتصفح يلاقي المكتبات (libnss3.so ...)
+    if (exePath) {
+      const exeDir = path.dirname(exePath);
+      process.env.LD_LIBRARY_PATH = [process.env.LD_LIBRARY_PATH || "", exeDir]
+        .filter(Boolean)
+        .join(":");
+      process.env.PATH = [process.env.PATH || "", exeDir]
+        .filter(Boolean)
+        .join(":");
+    }
 
     launchOptions = {
       args: [
@@ -101,39 +114,47 @@ async function htmlToPdfBuffer(html: string): Promise<Buffer> {
       ignoreHTTPSErrors: true,
     };
   } else {
-    let executablePath = process.env.PUPPETEER_EXECUTABLE_PATH;
+    // ===== تشغيل محلي (Development) =====
+    let executablePath =
+      process.env.PUPPETEER_EXECUTABLE_PATH || process.env.CHROME_PATH || "";
 
+    // جرّب puppeteer-core إن كان يوفّر executablePath()
     if (!executablePath) {
       try {
-        const puppeteerFull = await import("puppeteer");
-        executablePath = puppeteerFull.executablePath();
-        log("local chrome from puppeteer", { path: executablePath });
+        const maybe = (puppeteer as any).executablePath?.();
+        if (maybe) executablePath = maybe;
       } catch {
-        const candidates = [
-          "C:\\Program Files\\Google\\Chrome\\Application\\chrome.exe",
-          "C:\\Program Files (x86)\\Google\\Chrome\\Application\\chrome.exe",
-          "C:\\Program Files\\Microsoft\\Edge\\Application\\msedge.exe",
-          "C:\\Program Files (x86)\\Microsoft\\Edge\\Application\\msedge.exe",
-          "/Applications/Google Chrome.app/Contents/MacOS/Google Chrome",
-          "/Applications/Microsoft Edge.app/Contents/MacOS/Microsoft Edge",
-          "/usr/bin/google-chrome",
-          "/usr/bin/chromium-browser",
-          "/usr/bin/chromium",
-        ];
-        executablePath = candidates.find((p) => {
+        /* ignore */
+      }
+    }
+
+    // ابحث عن Chrome/Edge مثبّت محليًا
+    if (!executablePath) {
+      const candidates = [
+        "C:\\\\Program Files\\\\Google\\\\Chrome\\\\Application\\\\chrome.exe",
+        "C:\\\\Program Files (x86)\\\\Google\\\\Chrome\\\\Application\\\\chrome.exe",
+        "C:\\\\Program Files\\\\Microsoft\\\\Edge\\\\Application\\\\msedge.exe",
+        "C:\\\\Program Files (x86)\\\\Microsoft\\\\Edge\\\\Application\\\\msedge.exe",
+        "/Applications/Google Chrome.app/Contents/MacOS/Google Chrome",
+        "/Applications/Microsoft Edge.app/Contents/MacOS/Microsoft Edge",
+        "/usr/bin/google-chrome",
+        "/usr/bin/chromium-browser",
+        "/usr/bin/chromium",
+      ];
+      executablePath =
+        candidates.find((p) => {
           try {
             return fs.existsSync(p);
           } catch {
             return false;
           }
-        });
-        log("local chrome from candidates", { path: executablePath });
-      }
+        }) || "";
+      log("local chrome from candidates", { path: executablePath });
     }
 
     if (!executablePath) {
       throw new Error(
-        "لم يتم العثور على Chrome/Edge محليًا. ثبّت Google Chrome/Edge أو عرّف المتغير PUPPETEER_EXECUTABLE_PATH."
+        "لم يتم العثور على Chrome/Edge محليًا. ثبّت المتصفح أو عرّف PUPPETEER_EXECUTABLE_PATH/CHROME_PATH."
       );
     }
 
@@ -338,7 +359,7 @@ export async function createCustomer(formData: FormData) {
   // 3) status
   const status = normalizeStatus(INITIAL_STATUS);
 
-  // 4) save to Sheets (A..L)
+  // 4) save to Sheets
   await appendCustomerRow12([
     id, // A
     name, // B
