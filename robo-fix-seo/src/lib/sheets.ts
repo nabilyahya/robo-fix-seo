@@ -125,7 +125,7 @@ export async function findRowById(id: string) {
   };
 }
 
-/** ✅ البحث برقم الفيش (K = index 10) — 1-based */
+/** ✅ البحث برقم الفيش (K = index 10) — متروك للتوافق */
 export async function findRowByPublicId(publicId: string) {
   const sheets = await sheetsClient();
   const res = await sheets.spreadsheets.values.get({
@@ -140,6 +140,34 @@ export async function findRowByPublicId(publicId: string) {
       break;
     }
   }
+  return {
+    rowIndex,
+    row: rowIndex > 0 ? (values[rowIndex - 1] as any[]) : null,
+  };
+}
+
+/** ✅ NEW: البحث بواسطة رمز الفيش فقط (L = index 11) */
+export async function findRowByPassCode(passCode: string): Promise<{
+  rowIndex: number; // 1-based
+  row: any[] | null;
+}> {
+  const sheets = await sheetsClient();
+  const res = await sheets.spreadsheets.values.get({
+    spreadsheetId: process.env.GOOGLE_SHEETS_ID!,
+    range: RANGE_12, // يكفي حتى L
+  });
+  const values = (res.data.values ?? []) as string[][];
+  let rowIndex = -1;
+
+  const wanted = (passCode ?? "").toString().trim();
+  for (let i = 1; i < values.length; i++) {
+    const cell = (values[i]?.[11] ?? "").toString().trim(); // L = index 11
+    if (cell === wanted) {
+      rowIndex = i + 1; // 1-based
+      break;
+    }
+  }
+
   return {
     rowIndex,
     row: rowIndex > 0 ? (values[rowIndex - 1] as any[]) : null,

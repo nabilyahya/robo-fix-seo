@@ -51,8 +51,8 @@ function siteBaseUrl() {
       : "http://localhost:3000")
   );
 }
-function buildTrackUrl(publicId: string) {
-  return `${siteBaseUrl()}/track/${publicId}`;
+function buildTrackUrl(passCode: string) {
+  return `${siteBaseUrl()}/track/${passCode}`;
 }
 function genPass6(): string {
   return Math.floor(100000 + Math.random() * 900000).toString();
@@ -263,7 +263,7 @@ export async function createCustomer(formData: FormData) {
 
   // 5) PDF (React-PDF) -> Drive
   const base = siteBaseUrl();
-  const trackUrl = buildTrackUrl(publicId);
+  const trackUrl = buildTrackUrl(passCode);
 
   let pdfDirectUrl: string | null = null;
   let pdfViewUrl: string | null = null;
