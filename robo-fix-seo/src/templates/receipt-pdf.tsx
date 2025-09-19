@@ -47,14 +47,20 @@ function pickFirst(baseDir: string, candidates: string[]): string | null {
 }
 
 let __fontsRegistered = false;
-function registerFontsOnce() {
-  if (__fontsRegistered) return;
+let __selectedFamily = "Helvetica"; // fallback الافتراضي
+
+function registerFontsOnce(): { family: string; registered: boolean } {
+  if (__fontsRegistered) {
+    return {
+      family: __selectedFamily,
+      registered: __selectedFamily !== "Helvetica",
+    };
+  }
   __fontsRegistered = true;
 
   const publicDir = path.join(process.cwd(), "public");
   const fontsDir = path.join(publicDir, "fonts", "static");
 
-  // نحاول Inter بأسماء شائعة، ثم Cairo/Noto كبدائل.
   const Regular =
     pickFirst(fontsDir, [
       "Inter_24pt-Regular.ttf",
@@ -106,124 +112,127 @@ function registerFontsOnce() {
         { src: Bold!, fontWeight: 700 },
       ],
     });
+    __selectedFamily = "Inter";
+    return { family: "Inter", registered: true };
   } else {
-    // fallback آمن بدون كسر
-    // ملاحظة: Helvetica مدمجة مع PDFKit — ما تحتاج ملفات
-    // لكن لن تدعم العربية بشكل مثالي؛ إذا كنت تطبع عربية، احرص على وجود Cairo/Noto.
+    // لا نسجّل أي عائلة — سنستخدم Helvetica المدمجة
+    __selectedFamily = "Helvetica";
     console.warn(
-      "[PDF fonts] Inter/Cairo/Noto not found under public/fonts/static — falling back to Helvetica."
+      "[PDF fonts] Inter/Cairo/Noto not found under public/fonts/static — using Helvetica fallback."
     );
+    return { family: "Helvetica", registered: false };
   }
 }
 
-/* ========= Styles ========= */
-const styles = StyleSheet.create({
-  page: {
-    paddingTop: 34,
-    paddingBottom: 34,
-    paddingHorizontal: 24,
-    fontSize: 10, // أصغر قليلاً كما طلبت سابقًا
-    color: "#102a43",
-    fontFamily: "Inter", // سيقع إلى Helvetica إن لم تُسجّل Inter
-  },
-  row: { flexDirection: "row" },
-  spaceBetween: { justifyContent: "space-between" },
-  header: { marginBottom: 14 },
-  brandWrap: { flexDirection: "row", alignItems: "center", gap: 8 },
-  // شعار أكبر قليلًا وتوهّج ناعم
-  logoWrap: {
-    width: 44,
-    height: 44,
-    borderRadius: 10,
-    position: "relative",
-  },
-  logoGlow: {
-    position: "absolute",
-    left: -4,
-    top: -4,
-    right: -4,
-    bottom: -4,
-    borderRadius: 12,
-    backgroundColor: "#26c6da",
-    opacity: 0.18,
-  },
-  logo: { width: 44, height: 44, borderRadius: 10 },
-  h1: { fontSize: 15, fontWeight: 700, color: "#0f5ea8" },
-  smallMuted: { color: "#5b7083", fontSize: 8.5, marginTop: 2 },
+/* ========= Styles (dependent on family) ========= */
+function buildStyles(fontFamily: string) {
+  return StyleSheet.create({
+    page: {
+      paddingTop: 34,
+      paddingBottom: 34,
+      paddingHorizontal: 24,
+      fontSize: 10,
+      color: "#102a43",
+      fontFamily,
+    },
+    row: { flexDirection: "row" },
+    spaceBetween: { justifyContent: "space-between" },
+    header: { marginBottom: 14 },
+    brandWrap: { flexDirection: "row", alignItems: "center", gap: 8 },
+    logoWrap: {
+      width: 44,
+      height: 44,
+      borderRadius: 10,
+      position: "relative",
+    },
+    logoGlow: {
+      position: "absolute",
+      left: -4,
+      top: -4,
+      right: -4,
+      bottom: -4,
+      borderRadius: 12,
+      backgroundColor: "#26c6da",
+      opacity: 0.18,
+    },
+    logo: { width: 44, height: 44, borderRadius: 10 },
+    h1: { fontSize: 15, fontWeight: 700, color: "#0f5ea8" },
+    smallMuted: { color: "#5b7083", fontSize: 8.5, marginTop: 2 },
 
-  chip: {
-    alignSelf: "flex-end",
-    fontSize: 8.5,
-    paddingHorizontal: 8,
-    paddingVertical: 3,
-    backgroundColor: "#eef6ff",
-    color: "#0f5ea8",
-    borderRadius: 999,
-    marginBottom: 6,
-    fontWeight: 600,
-  },
-  meta: { textAlign: "right", color: "#5b7083", fontSize: 9 },
-  metaStrong: { color: "#0f5ea8", fontWeight: 700 },
+    chip: {
+      alignSelf: "flex-end",
+      fontSize: 8.5,
+      paddingHorizontal: 8,
+      paddingVertical: 3,
+      backgroundColor: "#eef6ff",
+      color: "#0f5ea8",
+      borderRadius: 999,
+      marginBottom: 6,
+      fontWeight: 600,
+    },
+    meta: { textAlign: "right", color: "#5b7083", fontSize: 9 },
+    metaStrong: { color: "#0f5ea8", fontWeight: 700 },
 
-  section: { marginTop: 9 },
-  h2: { fontSize: 11, fontWeight: 700, color: "#0f5ea8", marginBottom: 6 },
+    section: { marginTop: 9 },
+    h2: { fontSize: 11, fontWeight: 700, color: "#0f5ea8", marginBottom: 6 },
 
-  card: {
-    borderWidth: 1,
-    borderColor: "#e6eef5",
-    borderRadius: 8,
-    padding: 10,
-    marginBottom: 8,
-  },
+    card: {
+      borderWidth: 1,
+      borderColor: "#e6eef5",
+      borderRadius: 8,
+      padding: 10,
+      marginBottom: 8,
+    },
 
-  // key-value grid (label - value)
-  kvRow: {
-    flexDirection: "row",
-    borderBottomWidth: 1,
-    borderBottomColor: "#e6eef5",
-    paddingVertical: 5,
-  },
-  kvLast: { borderBottomWidth: 0 },
-  kvLabel: { width: 132, color: "#5b7083", fontSize: 9 },
-  kvValue: { flex: 1, fontWeight: 600, fontSize: 10 },
+    kvRow: {
+      flexDirection: "row",
+      borderBottomWidth: 1,
+      borderBottomColor: "#e6eef5",
+      paddingVertical: 5,
+    },
+    kvLast: { borderBottomWidth: 0 },
+    kvLabel: { width: 132, color: "#5b7083", fontSize: 9 },
+    kvValue: { flex: 1, fontWeight: 600, fontSize: 10 },
 
-  // two-column grid
-  col: { flex: 1 },
-  gap16: { gap: 14 },
+    col: { flex: 1 },
+    gap16: { gap: 14 },
 
-  notice: {
-    borderWidth: 1,
-    borderColor: "#e6eef5",
-    borderRadius: 8,
-    padding: 10,
-    color: "#5b7083",
-    fontSize: 9.5,
-  },
+    notice: {
+      borderWidth: 1,
+      borderColor: "#e6eef5",
+      borderRadius: 8,
+      padding: 10,
+      color: "#5b7083",
+      fontSize: 9.5,
+    },
 
-  signatureRow: { flexDirection: "row", gap: 10, marginTop: 9 },
-  sigBox: {
-    flex: 1,
-    borderWidth: 1,
-    borderStyle: "dashed",
-    borderColor: "#e6eef5",
-    borderRadius: 8,
-    minHeight: 52,
-    alignItems: "center",
-    justifyContent: "center",
-    color: "#5b7083",
-    fontSize: 9.5,
-  },
+    signatureRow: { flexDirection: "row", gap: 10, marginTop: 9 },
+    sigBox: {
+      flex: 1,
+      borderWidth: 1,
+      borderStyle: "dashed",
+      borderColor: "#e6eef5",
+      borderRadius: 8,
+      minHeight: 52,
+      alignItems: "center",
+      justifyContent: "center",
+      color: "#5b7083",
+      fontSize: 9.5,
+    },
 
-  footer: {
-    marginTop: 8,
-    color: "#5b7083",
-    fontSize: 8.5,
-    textAlign: "left",
-  },
-});
+    footer: {
+      marginTop: 8,
+      color: "#5b7083",
+      fontSize: 8.5,
+      textAlign: "left",
+    },
+  });
+}
 
 /* ========= PDF Document ========= */
-function ReceiptDoc(d: TeslimatPdfData) {
+function ReceiptDoc(d: TeslimatPdfData & { family: string }) {
+  const styles = buildStyles(d.family);
+
   const company = d.companyName || "Robonarim";
   const serial = d.deviceSN && d.deviceSN.trim() ? d.deviceSN : "—";
   const accessories =
@@ -373,10 +382,11 @@ function streamToBuffer(stream: NodeJS.ReadableStream): Promise<Buffer> {
 export async function renderReceiptPdfBuffer(
   data: TeslimatPdfData
 ): Promise<Buffer> {
-  // سجّل الخطوط مرة واحدة وبمرونة
-  registerFontsOnce();
+  // 1) سجّل الخطوط وحدّد العائلة المختارة
+  const { family } = registerFontsOnce();
 
-  const instance = createPdf(<ReceiptDoc {...data} />);
+  // 2) مرّر العائلة إلى الوثيقة، والـ styles تتولّد بناءً عليها
+  const instance = createPdf(<ReceiptDoc {...data} family={family} />);
 
   if (typeof (instance as any).toBuffer === "function") {
     const out = await (instance as any).toBuffer();
