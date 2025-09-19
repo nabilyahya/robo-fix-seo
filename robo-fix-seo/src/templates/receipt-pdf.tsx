@@ -1,7 +1,7 @@
-// src/templates/teslimat-pdf.tsx
+// src/templates/receipt-pdf.tsx
+import React from "react";
 import path from "node:path";
 import fs from "node:fs";
-import React from "react";
 import {
   pdf as createPdf,
   Document,
@@ -11,234 +11,213 @@ import {
   Image,
   StyleSheet,
   Font,
-  Svg,
-  Defs,
-  RadialGradient,
-  Stop,
-  Rect,
 } from "@react-pdf/renderer";
-
-/* ========= Fonts: load TTF from public/fonts/static ========= */
-const fontRoot = path.join(process.cwd(), "public", "fonts", "static");
-function pickFontFile(base: string) {
-  const candidates = [
-    `Inter_24pt-${base}.ttf`,
-    `Inter_18pt-${base}.ttf`,
-    `Inter_28pt-${base}.ttf`,
-    `Inter-${base}.ttf`,
-  ].map((f) => path.join(fontRoot, f));
-  return candidates.find((p) => fs.existsSync(p));
-}
-const REGULAR = pickFontFile("Regular");
-const SEMIBOLD = pickFontFile("SemiBold") || pickFontFile("Medium") || REGULAR;
-const BOLD = pickFontFile("Bold") || SEMIBOLD;
-if (!REGULAR) {
-  throw new Error(
-    "Inter TTF not found. Place TTF files under public/fonts/static (e.g., Inter_24pt-Regular.ttf)"
-  );
-}
-Font.register({
-  family: "Inter24",
-  fonts: [
-    { src: REGULAR!, fontWeight: 400 },
-    { src: SEMIBOLD!, fontWeight: 600 },
-    { src: BOLD!, fontWeight: 700 },
-  ],
-});
-Font.registerHyphenationCallback((word) => [word]);
-
-/* ========= Design Tokens ========= */
-const TOKENS = {
-  brand: "#1e88e5",
-  brandDark: "#0f5ea8",
-  accent: "#26c6da",
-  ink: "#102a43",
-  muted: "#5b7083",
-  paper: "#ffffff",
-  line: "#e6eef5",
-};
-const PX = (n: number) => n;
 
 /* ========= Types ========= */
 export type TeslimatPdfData = {
-  receiptNo: string;
-  dateStr: string;
+  receiptNo: string; // RN-YYYY-2xxxxx
+  dateStr: string; // TR date string
   name: string;
   phone: string;
   address: string;
-  deviceType: string;
+  deviceType: string; // Model
   issue: string;
   companyName?: string;
-  logoUrl?: string;
-  deviceSN?: string;
-  deviceAccessories?: string;
+
+  // اختياري
+  logoUrl?: string; // absolute URL (public/logo_square.jpg)
+  deviceSN?: string; // Seri No (optional)
+  deviceAccessories?: string; // Teslim Alınan Aksesuarlar (optional)
 };
 
-/* ===== Brand logo with visible radial glow ===== */
-function BrandLogo({ src }: { src?: string }) {
-  return (
-    <View style={styles.logoWrap}>
-      {/* glow fills the wrapper so it won't be clipped */}
-      <Svg style={styles.logoGlowSvg}>
-        <Defs>
-          <RadialGradient id="roboglow" cx="50%" cy="50%" r="95%">
-            <Stop offset="0%" stopColor="#1e88e5" stopOpacity={0.36} />
-            <Stop offset="55%" stopColor="#1e88e5" stopOpacity={0.18} />
-            <Stop offset="100%" stopColor="#1e88e5" stopOpacity={0} />
-          </RadialGradient>
-        </Defs>
-        <Rect
-          x="0"
-          y="0"
-          width="100%"
-          height="100%"
-          rx={16}
-          fill="url(#roboglow)"
-        />
-      </Svg>
-
-      {/* white plate inside the glow */}
-      <View style={styles.logoPlate} />
-
-      {/* actual logo */}
-      {src ? <Image src={src} style={styles.logoImg} /> : null}
-    </View>
-  );
+/* ========= Font loader (robust) ========= */
+function exists(p: string) {
+  try {
+    return fs.existsSync(p);
+  } catch {
+    return false;
+  }
+}
+function pickFirst(baseDir: string, candidates: string[]): string | null {
+  for (const f of candidates) {
+    const full = path.join(baseDir, f);
+    if (exists(full)) return full;
+  }
+  return null;
 }
 
-/* ========= Styles (narrow margins + smaller type + refined glow) ========= */
+let __fontsRegistered = false;
+function registerFontsOnce() {
+  if (__fontsRegistered) return;
+  __fontsRegistered = true;
+
+  const publicDir = path.join(process.cwd(), "public");
+  const fontsDir = path.join(publicDir, "fonts", "static");
+
+  // نحاول Inter بأسماء شائعة، ثم Cairo/Noto كبدائل.
+  const Regular =
+    pickFirst(fontsDir, [
+      "Inter_24pt-Regular.ttf",
+      "Inter_18pt-Regular.ttf",
+      "Inter-Regular.ttf",
+      "Inter-Regular-400.ttf",
+      "Cairo-Regular.ttf",
+      "NotoSans-Regular.ttf",
+      "NotoSansArabic-Regular.ttf",
+    ]) || null;
+
+  const Medium =
+    pickFirst(fontsDir, [
+      "Inter_24pt-Medium.ttf",
+      "Inter_18pt-Medium.ttf",
+      "Inter-Medium.ttf",
+      "Cairo-Medium.ttf",
+      "NotoSans-Medium.ttf",
+      "NotoSansArabic-Medium.ttf",
+    ]) || Regular;
+
+  const SemiBold =
+    pickFirst(fontsDir, [
+      "Inter_24pt-SemiBold.ttf",
+      "Inter_18pt-SemiBold.ttf",
+      "Inter-SemiBold.ttf",
+      "Cairo-SemiBold.ttf",
+      "NotoSans-SemiBold.ttf",
+      "NotoSansArabic-SemiBold.ttf",
+    ]) || Medium;
+
+  const Bold =
+    pickFirst(fontsDir, [
+      "Inter_24pt-Bold.ttf",
+      "Inter_18pt-Bold.ttf",
+      "Inter-Bold.ttf",
+      "Cairo-Bold.ttf",
+      "NotoSans-Bold.ttf",
+      "NotoSansArabic-Bold.ttf",
+    ]) || SemiBold;
+
+  if (Regular) {
+    Font.register({
+      family: "Inter",
+      fonts: [
+        { src: Regular, fontWeight: 400 },
+        { src: Medium!, fontWeight: 500 },
+        { src: SemiBold!, fontWeight: 600 },
+        { src: Bold!, fontWeight: 700 },
+      ],
+    });
+  } else {
+    // fallback آمن بدون كسر
+    // ملاحظة: Helvetica مدمجة مع PDFKit — ما تحتاج ملفات
+    // لكن لن تدعم العربية بشكل مثالي؛ إذا كنت تطبع عربية، احرص على وجود Cairo/Noto.
+    console.warn(
+      "[PDF fonts] Inter/Cairo/Noto not found under public/fonts/static — falling back to Helvetica."
+    );
+  }
+}
+
+/* ========= Styles ========= */
 const styles = StyleSheet.create({
   page: {
-    fontFamily: "Inter24",
-    lineHeight: 1.36,
-    paddingTop: PX(38),
-    paddingBottom: PX(40),
-    paddingHorizontal: PX(28),
-    fontSize: PX(10.2),
-    color: TOKENS.ink,
-    backgroundColor: TOKENS.paper,
+    paddingTop: 34,
+    paddingBottom: 34,
+    paddingHorizontal: 24,
+    fontSize: 10, // أصغر قليلاً كما طلبت سابقًا
+    color: "#102a43",
+    fontFamily: "Inter", // سيقع إلى Helvetica إن لم تُسجّل Inter
   },
-
   row: { flexDirection: "row" },
-  spaceBetween: { justifyContent: "space-between", alignItems: "center" },
-
-  header: { marginBottom: PX(14) },
-
-  brandWrap: { flexDirection: "row", alignItems: "center", gap: PX(10) },
-
-  // Logo block
-  logoWrap: { width: 54, height: 54, position: "relative" },
-  logoGlowSvg: { position: "absolute", left: 0, top: 0, width: 54, height: 54 },
-  logoPlate: {
+  spaceBetween: { justifyContent: "space-between" },
+  header: { marginBottom: 14 },
+  brandWrap: { flexDirection: "row", alignItems: "center", gap: 8 },
+  // شعار أكبر قليلًا وتوهّج ناعم
+  logoWrap: {
+    width: 44,
+    height: 44,
+    borderRadius: 10,
+    position: "relative",
+  },
+  logoGlow: {
     position: "absolute",
-    left: 2,
-    top: 2,
-    width: 50,
-    height: 50,
+    left: -4,
+    top: -4,
+    right: -4,
+    bottom: -4,
     borderRadius: 12,
-    backgroundColor: "#ffffff",
-    borderWidth: 1,
-    borderColor: "#e9f1fb",
+    backgroundColor: "#26c6da",
+    opacity: 0.18,
   },
-  logoImg: {
-    position: "absolute",
-    left: 8,
-    top: 8,
-    width: 38,
-    height: 38,
-    borderRadius: 9,
-  },
+  logo: { width: 44, height: 44, borderRadius: 10 },
+  h1: { fontSize: 15, fontWeight: 700, color: "#0f5ea8" },
+  smallMuted: { color: "#5b7083", fontSize: 8.5, marginTop: 2 },
 
-  h1: {
-    fontFamily: "Inter24",
-    fontSize: PX(16.2),
-    fontWeight: 700,
-    color: TOKENS.brandDark,
-    letterSpacing: 0.15,
-  },
-  smallMuted: { color: TOKENS.muted, fontSize: PX(9.4), marginTop: PX(1) },
-
-  docMeta: { textAlign: "right", color: TOKENS.muted, fontSize: PX(9.8) },
   chip: {
     alignSelf: "flex-end",
-    fontSize: PX(9.4),
-    paddingHorizontal: PX(8),
-    paddingVertical: PX(3),
-    borderRadius: PX(999),
+    fontSize: 8.5,
+    paddingHorizontal: 8,
+    paddingVertical: 3,
     backgroundColor: "#eef6ff",
-    borderWidth: 1,
-    borderColor: TOKENS.line,
-    color: TOKENS.brandDark,
-    fontWeight: 700,
-    marginBottom: PX(4),
+    color: "#0f5ea8",
+    borderRadius: 999,
+    marginBottom: 6,
+    fontWeight: 600,
   },
-  metaLine: { marginTop: PX(1.5) },
-  metaStrong: { color: TOKENS.brandDark, fontWeight: 700 },
+  meta: { textAlign: "right", color: "#5b7083", fontSize: 9 },
+  metaStrong: { color: "#0f5ea8", fontWeight: 700 },
 
-  section: { marginTop: PX(12) },
-  h2: {
-    fontFamily: "Inter24",
-    marginTop: PX(1),
-    marginBottom: PX(6),
-    fontSize: PX(13.2),
-    color: TOKENS.brandDark,
-    fontWeight: 700,
-  },
+  section: { marginTop: 9 },
+  h2: { fontSize: 11, fontWeight: 700, color: "#0f5ea8", marginBottom: 6 },
 
   card: {
     borderWidth: 1,
-    borderColor: TOKENS.line,
-    borderRadius: PX(10),
-    paddingVertical: PX(10),
-    paddingHorizontal: PX(12),
-    marginBottom: PX(8),
-    backgroundColor: TOKENS.paper,
+    borderColor: "#e6eef5",
+    borderRadius: 8,
+    padding: 10,
+    marginBottom: 8,
   },
 
-  col: { flex: 1 },
-  gapRow: { flexDirection: "row", gap: PX(12) },
-
+  // key-value grid (label - value)
   kvRow: {
     flexDirection: "row",
-    alignItems: "flex-start",
-    paddingVertical: PX(4.5),
     borderBottomWidth: 1,
-    borderBottomColor: TOKENS.line,
+    borderBottomColor: "#e6eef5",
+    paddingVertical: 5,
   },
   kvLast: { borderBottomWidth: 0 },
-  kvLabel: { width: PX(132), color: TOKENS.muted, fontSize: PX(10.2) },
-  kvValue: { flex: 1, fontSize: PX(10.2), fontWeight: 700 },
+  kvLabel: { width: 132, color: "#5b7083", fontSize: 9 },
+  kvValue: { flex: 1, fontWeight: 600, fontSize: 10 },
+
+  // two-column grid
+  col: { flex: 1 },
+  gap16: { gap: 14 },
 
   notice: {
-    paddingVertical: PX(8),
-    paddingHorizontal: PX(10),
-    borderRadius: PX(8),
     borderWidth: 1,
-    borderColor: TOKENS.line,
-    backgroundColor: "#f7fcff",
-    color: TOKENS.muted,
-    fontSize: PX(10),
+    borderColor: "#e6eef5",
+    borderRadius: 8,
+    padding: 10,
+    color: "#5b7083",
+    fontSize: 9.5,
   },
 
-  signatureRow: { flexDirection: "row", gap: PX(12), marginTop: PX(8) },
+  signatureRow: { flexDirection: "row", gap: 10, marginTop: 9 },
   sigBox: {
     flex: 1,
     borderWidth: 1,
     borderStyle: "dashed",
-    borderColor: TOKENS.line,
-    borderRadius: PX(8),
-    minHeight: PX(58),
-    padding: PX(8),
-    color: TOKENS.muted,
-    fontSize: PX(10),
+    borderColor: "#e6eef5",
+    borderRadius: 8,
+    minHeight: 52,
     alignItems: "center",
     justifyContent: "center",
+    color: "#5b7083",
+    fontSize: 9.5,
   },
 
   footer: {
-    marginTop: PX(10),
-    color: TOKENS.muted,
-    fontSize: PX(8.8),
+    marginTop: 8,
+    color: "#5b7083",
+    fontSize: 8.5,
     textAlign: "left",
   },
 });
@@ -259,7 +238,12 @@ function ReceiptDoc(d: TeslimatPdfData) {
         <View style={[styles.row, styles.spaceBetween, styles.header]}>
           <View>
             <View style={styles.brandWrap}>
-              <BrandLogo src={d.logoUrl} />
+              {d.logoUrl ? (
+                <View style={styles.logoWrap}>
+                  <View style={styles.logoGlow} />
+                  <Image src={d.logoUrl} style={styles.logo} />
+                </View>
+              ) : null}
               <View>
                 <Text style={styles.h1}>{company}</Text>
                 <Text style={styles.smallMuted}>
@@ -269,13 +253,13 @@ function ReceiptDoc(d: TeslimatPdfData) {
             </View>
           </View>
 
-          <View style={styles.docMeta}>
+          <View>
             <Text style={styles.chip}>Teslim Fişi</Text>
-            <View>
-              <Text style={styles.metaLine}>
+            <View style={styles.meta}>
+              <Text>
                 Sipariş No: <Text style={styles.metaStrong}>{d.receiptNo}</Text>
               </Text>
-              <Text style={styles.metaLine}>
+              <Text>
                 Teslim Alma Tarihi:{" "}
                 <Text style={styles.metaStrong}>{d.dateStr}</Text>
               </Text>
@@ -284,7 +268,7 @@ function ReceiptDoc(d: TeslimatPdfData) {
         </View>
 
         {/* Two columns */}
-        <View style={styles.gapRow}>
+        <View style={[styles.row, styles.gap16]}>
           <View style={styles.col}>
             <View style={styles.card}>
               <Text style={styles.h2}>Müşteri Bilgileri</Text>
@@ -331,21 +315,17 @@ function ReceiptDoc(d: TeslimatPdfData) {
         </View>
 
         {/* Notes + Signatures */}
-        <View style={[styles.gapRow, styles.section]}>
+        <View style={[styles.row, styles.gap16, styles.section]}>
           <View style={styles.col}>
             <View style={styles.card}>
               <Text style={styles.h2}>Notlar ve Koşullar</Text>
               <Text
-                style={{
-                  color: TOKENS.muted,
-                  fontSize: PX(10),
-                  marginBottom: PX(5),
-                }}
+                style={{ color: "#5b7083", fontSize: 9.5, marginBottom: 4 }}
               >
                 • Bu fiş yalnızca cihazın teslim alındığını belgelendirir. Nihai
                 fiyat, teşhis sonrası ayrı bir dosya olarak gönderilir.
               </Text>
-              <Text style={{ color: TOKENS.muted, fontSize: PX(10) }}>
+              <Text style={{ color: "#5b7083", fontSize: 9.5 }}>
                 • Teslim anında görünmeyen gizli hasarlardan, teşhis öncesi
                 sorumluluk kabul edilmez.
               </Text>
@@ -389,10 +369,15 @@ function streamToBuffer(stream: NodeJS.ReadableStream): Promise<Buffer> {
   });
 }
 
+/** Render React-PDF to Buffer (يتعامل مع كل الأشكال: Buffer/Uint8Array/Stream/Blob) */
 export async function renderReceiptPdfBuffer(
   data: TeslimatPdfData
 ): Promise<Buffer> {
+  // سجّل الخطوط مرة واحدة وبمرونة
+  registerFontsOnce();
+
   const instance = createPdf(<ReceiptDoc {...data} />);
+
   if (typeof (instance as any).toBuffer === "function") {
     const out = await (instance as any).toBuffer();
     if (Buffer.isBuffer(out)) return out;
@@ -400,18 +385,22 @@ export async function renderReceiptPdfBuffer(
     if (ArrayBuffer.isView(out))
       return Buffer.from((out as unknown as ArrayBufferView).buffer);
   }
+
   if (typeof (instance as any).toStream === "function") {
     const s = (await (instance as any).toStream()) as NodeJS.ReadableStream;
     return streamToBuffer(s);
   }
+
   if (typeof (instance as any).toBlob === "function") {
     const blob: Blob = await (instance as any).toBlob();
     const arr = await blob.arrayBuffer();
     return Buffer.from(new Uint8Array(arr));
   }
+
   if (typeof (instance as any).toString === "function") {
     const str: string = await (instance as any).toString();
     return Buffer.from(str);
   }
+
   throw new Error("Could not render PDF buffer from @react-pdf/renderer");
 }
