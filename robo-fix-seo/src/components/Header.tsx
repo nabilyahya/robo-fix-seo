@@ -1,20 +1,21 @@
-// src/components/Header.tsx
 "use client";
 
 import Link from "next/link";
 import { Button } from "@/components/ui/button";
-import { Wrench, Menu, X } from "lucide-react";
+import { Wrench, Menu, X, Search } from "lucide-react";
 import { useState } from "react";
 import { FaWhatsapp } from "react-icons/fa";
 import logo from "../../public/logo2.png";
 import Image from "next/image";
 import { reportAdsConversionThenNavigate } from "@/lib/ads";
+
 const Header = () => {
   const [isMobileMenuOpen, setIsMobileMenuOpen] = useState(false);
   const GADS_WHATSAPP =
     process.env.NEXT_PUBLIC_GADS_WHATSAPP ||
     "AW-17534185067/NLoeCOO285cbEOvc-ahB";
   const WHATSAPP_URL = "https://wa.me/+905515222067";
+
   const toggleMobileMenu = () => {
     setIsMobileMenuOpen(!isMobileMenuOpen);
   };
@@ -68,6 +69,21 @@ const Header = () => {
           </Link>
         </nav>
 
+        {/* Track Button (Desktop) */}
+        <Button
+          asChild
+          variant="hero"
+          size="default"
+          className="min-w-[140px] text-xs sm:text-sm bg-gradient-to-br from-[#1e88e5] to-[#26c6da] hover:opacity-95"
+        >
+          <a href="/track" aria-label="Sipariş Takibi sayfasına git">
+            <span className="inline-flex items-center gap-2">
+              <Search className="h-4 w-4" />
+              Sipariş Takibi
+            </span>
+          </a>
+        </Button>
+
         {/* WhatsApp Button */}
         <Button
           asChild
@@ -76,7 +92,7 @@ const Header = () => {
           className="min-w-[110px] max-w-[480px] text-xs sm:text-sm bg-green-500 hover:bg-green-600"
         >
           <a
-            href="https://wa.me/+905515222067"
+            href={WHATSAPP_URL}
             target="_blank"
             rel="noopener noreferrer"
             aria-label="WhatsApp ile iletişime geç"
@@ -92,7 +108,7 @@ const Header = () => {
         </Button>
       </div>
 
-      {/* Mobile Menu Button */}
+      {/* Mobile Menu Button + Quick WhatsApp */}
       <div className="lg:hidden flex items-center gap-2">
         <Button
           asChild
@@ -101,7 +117,7 @@ const Header = () => {
           className="text-xs px-3 bg-green-500 hover:bg-green-600"
         >
           <a
-            href="https://wa.me/+905515222067"
+            href={WHATSAPP_URL}
             target="_blank"
             rel="noopener noreferrer"
             onClick={(e) => {
@@ -109,6 +125,7 @@ const Header = () => {
               reportAdsConversionThenNavigate(GADS_WHATSAPP, WHATSAPP_URL);
             }}
             className="flex items-center gap-1"
+            aria-label="WhatsApp ile iletişime geç"
           >
             <FaWhatsapp className="h-4 w-4" />
             WhatsApp
@@ -162,6 +179,14 @@ const Header = () => {
             >
               Hakkımızda
             </a>
+            {/* Track (Mobile) */}
+            <Link
+              className="text-foreground text-sm font-medium hover:text-primary transition-colors py-3 border-b border-border/50"
+              href="/track"
+              onClick={() => setIsMobileMenuOpen(false)}
+            >
+              Sipariş Takibi
+            </Link>
             <Link
               className="text-foreground text-sm font-medium hover:text-primary transition-colors py-3"
               href="/blog"
@@ -169,16 +194,20 @@ const Header = () => {
             >
               Blog
             </Link>
-            {/* 
-            <Link
-              className="text-foreground text-sm font-medium hover:text-primary transition-colors py-3"
-              href="#contact"
-              onClick={() => setIsMobileMenuOpen(false)}
-            >
-              İletişim
-            </Link> 
-            */}
           </nav>
+
+          {/* Optional: CTA button at bottom of mobile menu */}
+          <div className="px-4 pb-4 pt-2">
+            <a
+              href="/track"
+              onClick={() => setIsMobileMenuOpen(false)}
+              className="w-full inline-flex items-center justify-center gap-2 rounded-xl px-4 py-2.5 text-white font-semibold bg-gradient-to-br from-[#1e88e5] to-[#26c6da] hover:opacity-95"
+              aria-label="Sipariş Takibi sayfasına git"
+            >
+              <Search className="h-4 w-4" />
+              Sipariş Takibi
+            </a>
+          </div>
         </div>
       )}
     </header>
