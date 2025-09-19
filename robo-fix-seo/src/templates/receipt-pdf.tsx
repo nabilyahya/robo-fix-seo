@@ -28,83 +28,105 @@ export type TeslimatPdfData = {
   deviceAccessories?: string; // Teslim Alınan Aksesuarlar (optional)
 };
 
-/* ========= Local font helpers (robust) ========= */
-// حلّ يولّد مسارًا مطلقًا لملف TTF موجود بجانب هذا الملف (يعمل على Vercel/Serverless)
-function localFont(rel: string): string | null {
-  try {
-    return decodeURI(new URL(`./fonts/${rel}`, import.meta.url).pathname);
-  } catch {
-    return null;
+/* ========= Helpers ========= */
+function siteBaseUrl() {
+  return (
+    process.env.NEXT_PUBLIC_SITE_URL ||
+    (process.env.VERCEL_URL
+      ? `https://${process.env.VERCEL_URL}`
+      : "http://localhost:3000")
+  );
+}
+
+function prefersArabic(texts: string[]) {
+  const sample = (texts || []).filter(Boolean).join(" ");
+  return /[\u0600-\u06FF]/.test(sample);
+}
+
+/** التركي → ASCII في حال Helvetica */
+function trToAscii(input?: string) {
+  if (!input) return "";
+  const map: Record<string, string> = {
+    ç: "c",
+    Ç: "C",
+    ğ: "g",
+    Ğ: "G",
+    ı: "i",
+    İ: "I",
+    İ: "I", // حالات النقطة
+    ö: "o",
+    Ö: "O",
+    ş: "s",
+    Ş: "S",
+    ü: "u",
+    Ü: "U",
+  };
+  return input.replace(/ç|Ç|ğ|Ğ|ı|İ|İ|ö|Ö|ş|Ş|ü|Ü/g, (m) => map[m] || m);
+}
+
+/** إن كنا على Helvetica حوّل التركي إلى ASCII، وإلا اترك النص */
+function safeText(txt: string, family: string) {
+  if (family === "Helvetica") {
+    return trToAscii(txt);
   }
+  return txt;
 }
 
 let __fontsRegistered = false;
 let __selectedFamily = "Helvetica"; // fallback النهائي
 
-function prefersArabic(texts: string[]) {
-  const sample = (texts || []).filter(Boolean).join(" ");
-  // نطاقات عربية أساسية
-  return /[\u0600-\u06FF]/.test(sample);
-}
-
-function registerFontsOnce(wantArabic: boolean): { family: string } {
+function registerWebFontsOnce(wantArabic: boolean): { family: string } {
   if (__fontsRegistered) return { family: __selectedFamily };
   __fontsRegistered = true;
 
-  // لو في نص عربي، نعطي الأولوية لـ Cairo
-  const prioritizeCairo = wantArabic;
+  const base = siteBaseUrl(); // مثال: https://yourdomain.com
+  const urls = {
+    inter: {
+      regular: `${base}/fonts/static/Inter_24pt-Regular.ttf`,
+      medium: `${base}/fonts/static/Inter_24pt-Medium.ttf`,
+      semibold: `${base}/fonts/static/Inter_24pt-SemiBold.ttf`,
+      bold: `${base}/fonts/static/Inter_24pt-Bold.ttf`,
+    },
+    cairo: {
+      regular: `${base}/fonts/static/Cairo-Regular.ttf`,
+      semibold: `${base}/fonts/static/Cairo-SemiBold.ttf`,
+      bold: `${base}/fonts/static/Cairo-Bold.ttf`,
+    },
+  };
 
-  // Inter candidates
-  const interRegular =
-    localFont("Inter-Regular.ttf") ||
-    localFont("Inter_24pt-Regular.ttf") ||
-    localFont("Inter_18pt-Regular.ttf");
-  const interMedium =
-    localFont("Inter-Medium.ttf") ||
-    localFont("Inter_24pt-Medium.ttf") ||
-    interRegular;
-  const interSemi =
-    localFont("Inter-SemiBold.ttf") ||
-    localFont("Inter_24pt-SemiBold.ttf") ||
-    interMedium;
-  const interBold =
-    localFont("Inter-Bold.ttf") ||
-    localFont("Inter_24pt-Bold.ttf") ||
-    interSemi;
-
-  // Cairo candidates (Arabic shaping)
-  const cairoRegular = localFont("Cairo-Regular.ttf");
-  const cairoSemi = localFont("Cairo-SemiBold.ttf") || cairoRegular;
-  const cairoBold = localFont("Cairo-Bold.ttf") || cairoSemi;
-
-  if (prioritizeCairo && cairoRegular) {
-    Font.register({
-      family: "Cairo",
-      fonts: [
-        { src: cairoRegular, fontWeight: 400 },
-        { src: cairoSemi!, fontWeight: 600 },
-        { src: cairoBold!, fontWeight: 700 },
-      ],
-    });
-    __selectedFamily = "Cairo";
-    return { family: "Cairo" };
+  if (wantArabic) {
+    try {
+      Font.register({
+        family: "Cairo",
+        fonts: [
+          { src: urls.cairo.regular, fontWeight: 400 },
+          { src: urls.cairo.semibold, fontWeight: 600 },
+          { src: urls.cairo.bold, fontWeight: 700 },
+        ],
+      });
+      __selectedFamily = "Cairo";
+      return { family: "Cairo" };
+    } catch {
+      // نكمل لمحاولة Inter أو Helvetica
+    }
   }
 
-  if (interRegular) {
+  try {
     Font.register({
       family: "Inter",
       fonts: [
-        { src: interRegular, fontWeight: 400 },
-        { src: interMedium!, fontWeight: 500 },
-        { src: interSemi!, fontWeight: 600 },
-        { src: interBold!, fontWeight: 700 },
+        { src: urls.inter.regular, fontWeight: 400 },
+        { src: urls.inter.medium, fontWeight: 500 },
+        { src: urls.inter.semibold, fontWeight: 600 },
+        { src: urls.inter.bold, fontWeight: 700 },
       ],
     });
     __selectedFamily = "Inter";
     return { family: "Inter" };
+  } catch {
+    // نعود لـ Helvetica
   }
 
-  // لم نجد ملفات خطوط — نستخدم Helvetica المدمجة
   __selectedFamily = "Helvetica";
   return { family: "Helvetica" };
 }
@@ -116,7 +138,7 @@ function buildStyles(fontFamily: string) {
       paddingTop: 34,
       paddingBottom: 34,
       paddingHorizontal: 24,
-      fontSize: 10, // مصغّر كما اتفقنا
+      fontSize: 10,
       color: "#102a43",
       fontFamily,
     },
@@ -229,6 +251,48 @@ function ReceiptDoc(d: TeslimatPdfData & { family: string }) {
       ? d.deviceAccessories
       : "—";
 
+  // نصوص تركية ثابتة — نحولها لـ ASCII فقط إذا Helvetica
+  const phrase_subtitle = safeText(
+    "Kesin Teşhis • Hızlı Onarım • Bursa içi Kurye",
+    d.family
+  );
+  const label_customerInfo = safeText("Müşteri Bilgileri", d.family);
+  const label_fullname = safeText("Ad Soyad", d.family);
+  const label_phone = safeText("Telefon", d.family);
+  const label_address = safeText("Adres", d.family);
+  const label_deviceInfo = safeText("Cihaz Bilgileri", d.family);
+  const label_model = safeText("Model", d.family);
+  const label_sn = safeText("Seri No", d.family);
+  const label_accessories = safeText("Teslim Alınan Aksesuarlar", d.family);
+  const label_issue = safeText("Varsa Arıza Tanımı", d.family);
+  const label_notes = safeText("Notlar ve Koşullar", d.family);
+  const label_note1 = safeText(
+    "• Bu fiş yalnızca cihazın teslim alındığını belgelendirir. Nihai fiyat, teşhis sonrası ayrı bir dosya olarak gönderilir.",
+    d.family
+  );
+  const label_note2 = safeText(
+    "• Teslim anında görünmeyen gizli hasarlardan, teşhis öncesi sorumluluk kabul edilmez.",
+    d.family
+  );
+  const label_sign = safeText("İmzalar", d.family);
+  const label_custSign = safeText("Müşteri İmzası", d.family);
+  const label_staffSign = safeText("Görevli İmzası", d.family);
+  const label_chip = safeText("Teslim Fişi", d.family);
+  const label_orderNo = safeText("Sipariş No:", d.family);
+  const label_date = safeText("Teslim Alma Tarihi:", d.family);
+
+  // قيَم ديناميكية — حوّلها لو Helvetica
+  const dyn_name = safeText(d.name, d.family);
+  const dyn_phone = safeText(d.phone, d.family);
+  const dyn_address = safeText(d.address, d.family);
+  const dyn_deviceType = safeText(d.deviceType, d.family);
+  const dyn_issue = safeText(d.issue || "—", d.family);
+  const dyn_company = safeText(company, d.family);
+  const dyn_receipt = safeText(d.receiptNo, d.family);
+  const dyn_date = safeText(d.dateStr, d.family);
+  const dyn_serial = safeText(serial, d.family);
+  const dyn_accessories = safeText(accessories, d.family);
+
   return (
     <Document>
       <Page size="A4" style={styles.page}>
@@ -243,23 +307,21 @@ function ReceiptDoc(d: TeslimatPdfData & { family: string }) {
                 </View>
               ) : null}
               <View>
-                <Text style={styles.h1}>{company}</Text>
-                <Text style={styles.smallMuted}>
-                  Kesin Teşhis • Hızlı Onarım • Bursa içi Kurye
-                </Text>
+                <Text style={styles.h1}>{dyn_company}</Text>
+                <Text style={styles.smallMuted}>{phrase_subtitle}</Text>
               </View>
             </View>
           </View>
 
           <View>
-            <Text style={styles.chip}>Teslim Fişi</Text>
+            <Text style={styles.chip}>{label_chip}</Text>
             <View style={styles.meta}>
               <Text>
-                Sipariş No: <Text style={styles.metaStrong}>{d.receiptNo}</Text>
+                {label_orderNo}{" "}
+                <Text style={styles.metaStrong}>{dyn_receipt}</Text>
               </Text>
               <Text>
-                Teslim Alma Tarihi:{" "}
-                <Text style={styles.metaStrong}>{d.dateStr}</Text>
+                {label_date} <Text style={styles.metaStrong}>{dyn_date}</Text>
               </Text>
             </View>
           </View>
@@ -269,36 +331,36 @@ function ReceiptDoc(d: TeslimatPdfData & { family: string }) {
         <View style={[styles.row, styles.gap16]}>
           <View style={styles.col}>
             <View style={styles.card}>
-              <Text style={styles.h2}>Müşteri Bilgileri</Text>
+              <Text style={styles.h2}>{label_customerInfo}</Text>
               <View style={styles.kvRow}>
-                <Text style={styles.kvLabel}>Ad Soyad</Text>
-                <Text style={styles.kvValue}>{d.name}</Text>
+                <Text style={styles.kvLabel}>{label_fullname}</Text>
+                <Text style={styles.kvValue}>{dyn_name}</Text>
               </View>
               <View style={styles.kvRow}>
-                <Text style={styles.kvLabel}>Telefon</Text>
-                <Text style={styles.kvValue}>{d.phone}</Text>
+                <Text style={styles.kvLabel}>{label_phone}</Text>
+                <Text style={styles.kvValue}>{dyn_phone}</Text>
               </View>
               <View style={[styles.kvRow, styles.kvLast]}>
-                <Text style={styles.kvLabel}>Adres</Text>
-                <Text style={styles.kvValue}>{d.address}</Text>
+                <Text style={styles.kvLabel}>{label_address}</Text>
+                <Text style={styles.kvValue}>{dyn_address}</Text>
               </View>
             </View>
           </View>
 
           <View style={styles.col}>
             <View style={styles.card}>
-              <Text style={styles.h2}>Cihaz Bilgileri</Text>
+              <Text style={styles.h2}>{label_deviceInfo}</Text>
               <View style={styles.kvRow}>
-                <Text style={styles.kvLabel}>Model</Text>
-                <Text style={styles.kvValue}>{d.deviceType}</Text>
+                <Text style={styles.kvLabel}>{label_model}</Text>
+                <Text style={styles.kvValue}>{dyn_deviceType}</Text>
               </View>
               <View style={styles.kvRow}>
-                <Text style={styles.kvLabel}>Seri No</Text>
-                <Text style={styles.kvValue}>{serial}</Text>
+                <Text style={styles.kvLabel}>{label_sn}</Text>
+                <Text style={styles.kvValue}>{dyn_serial}</Text>
               </View>
               <View style={[styles.kvRow, styles.kvLast]}>
-                <Text style={styles.kvLabel}>Teslim Alınan Aksesuarlar</Text>
-                <Text style={styles.kvValue}>{accessories}</Text>
+                <Text style={styles.kvLabel}>{label_accessories}</Text>
+                <Text style={styles.kvValue}>{dyn_accessories}</Text>
               </View>
             </View>
           </View>
@@ -307,8 +369,8 @@ function ReceiptDoc(d: TeslimatPdfData & { family: string }) {
         {/* Issue */}
         <View style={styles.section}>
           <View style={styles.card}>
-            <Text style={styles.h2}>Varsa Arıza Tanımı</Text>
-            <Text style={styles.notice}>{d.issue || "—"}</Text>
+            <Text style={styles.h2}>{label_issue}</Text>
+            <Text style={styles.notice}>{dyn_issue}</Text>
           </View>
         </View>
 
@@ -316,29 +378,27 @@ function ReceiptDoc(d: TeslimatPdfData & { family: string }) {
         <View style={[styles.row, styles.gap16, styles.section]}>
           <View style={styles.col}>
             <View style={styles.card}>
-              <Text style={styles.h2}>Notlar ve Koşullar</Text>
+              <Text style={styles.h2}>{label_notes}</Text>
               <Text
                 style={{ color: "#5b7083", fontSize: 9.5, marginBottom: 4 }}
               >
-                • Bu fiş yalnızca cihazın teslim alındığını belgelendirir. Nihai
-                fiyat, teşhis sonrası ayrı bir dosya olarak gönderilir.
+                {label_note1}
               </Text>
               <Text style={{ color: "#5b7083", fontSize: 9.5 }}>
-                • Teslim anında görünmeyen gizli hasarlardan، teşhis öncesi
-                sorumluluk kabul edilmez.
+                {label_note2}
               </Text>
             </View>
           </View>
 
           <View style={styles.col}>
             <View style={styles.card}>
-              <Text style={styles.h2}>İmzalar</Text>
+              <Text style={styles.h2}>{label_sign}</Text>
               <View style={styles.signatureRow}>
                 <View style={styles.sigBox}>
-                  <Text>Müşteri İmzası</Text>
+                  <Text>{label_custSign}</Text>
                 </View>
                 <View style={styles.sigBox}>
-                  <Text>Görevli İmzası</Text>
+                  <Text>{label_staffSign}</Text>
                 </View>
               </View>
             </View>
@@ -347,8 +407,11 @@ function ReceiptDoc(d: TeslimatPdfData & { family: string }) {
 
         {/* Footer */}
         <Text style={styles.footer}>
-          Bu belge otomatik oluşturuldu — PDF olarak paylaşılabilir. ©{" "}
-          {new Date().getFullYear()} {company}
+          {safeText(
+            "Bu belge otomatik oluşturuldu — PDF olarak paylaşılabilir.",
+            d.family
+          )}{" "}
+          © {new Date().getFullYear()} {dyn_company}
         </Text>
       </Page>
     </Document>
@@ -371,8 +434,8 @@ function streamToBuffer(stream: NodeJS.ReadableStream): Promise<Buffer> {
 export async function renderReceiptPdfBuffer(
   data: TeslimatPdfData
 ): Promise<Buffer> {
-  // اختر العائلة حسب وجود نص عربي (Cairo) أو استخدم Inter
-  const { family } = registerFontsOnce(
+  // اختر العائلة: Cairo إذا في عربي، وإلا Inter. وإن فشل التحميل → Helvetica.
+  const { family } = registerWebFontsOnce(
     prefersArabic([data.name, data.address, data.issue, data.companyName || ""])
   );
 
