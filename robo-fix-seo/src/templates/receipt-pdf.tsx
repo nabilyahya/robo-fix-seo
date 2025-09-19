@@ -1,7 +1,5 @@
 // src/templates/receipt-pdf.tsx
 import React from "react";
-import path from "node:path";
-import fs from "node:fs";
 import {
   pdf as createPdf,
   Document,
@@ -30,108 +28,95 @@ export type TeslimatPdfData = {
   deviceAccessories?: string; // Teslim Alınan Aksesuarlar (optional)
 };
 
-/* ========= Font loader (robust) ========= */
-function exists(p: string) {
+/* ========= Local font helpers (robust) ========= */
+// حلّ يولّد مسارًا مطلقًا لملف TTF موجود بجانب هذا الملف (يعمل على Vercel/Serverless)
+function localFont(rel: string): string | null {
   try {
-    return fs.existsSync(p);
+    return decodeURI(new URL(`./fonts/${rel}`, import.meta.url).pathname);
   } catch {
-    return false;
+    return null;
   }
-}
-function pickFirst(baseDir: string, candidates: string[]): string | null {
-  for (const f of candidates) {
-    const full = path.join(baseDir, f);
-    if (exists(full)) return full;
-  }
-  return null;
 }
 
 let __fontsRegistered = false;
-let __selectedFamily = "Helvetica"; // fallback الافتراضي
+let __selectedFamily = "Helvetica"; // fallback النهائي
 
-function registerFontsOnce(): { family: string; registered: boolean } {
-  if (__fontsRegistered) {
-    return {
-      family: __selectedFamily,
-      registered: __selectedFamily !== "Helvetica",
-    };
-  }
+function prefersArabic(texts: string[]) {
+  const sample = (texts || []).filter(Boolean).join(" ");
+  // نطاقات عربية أساسية
+  return /[\u0600-\u06FF]/.test(sample);
+}
+
+function registerFontsOnce(wantArabic: boolean): { family: string } {
+  if (__fontsRegistered) return { family: __selectedFamily };
   __fontsRegistered = true;
 
-  const publicDir = path.join(process.cwd(), "public");
-  const fontsDir = path.join(publicDir, "fonts", "static");
+  // لو في نص عربي، نعطي الأولوية لـ Cairo
+  const prioritizeCairo = wantArabic;
 
-  const Regular =
-    pickFirst(fontsDir, [
-      "Inter_24pt-Regular.ttf",
-      "Inter_18pt-Regular.ttf",
-      "Inter-Regular.ttf",
-      "Inter-Regular-400.ttf",
-      "Cairo-Regular.ttf",
-      "NotoSans-Regular.ttf",
-      "NotoSansArabic-Regular.ttf",
-    ]) || null;
+  // Inter candidates
+  const interRegular =
+    localFont("Inter-Regular.ttf") ||
+    localFont("Inter_24pt-Regular.ttf") ||
+    localFont("Inter_18pt-Regular.ttf");
+  const interMedium =
+    localFont("Inter-Medium.ttf") ||
+    localFont("Inter_24pt-Medium.ttf") ||
+    interRegular;
+  const interSemi =
+    localFont("Inter-SemiBold.ttf") ||
+    localFont("Inter_24pt-SemiBold.ttf") ||
+    interMedium;
+  const interBold =
+    localFont("Inter-Bold.ttf") ||
+    localFont("Inter_24pt-Bold.ttf") ||
+    interSemi;
 
-  const Medium =
-    pickFirst(fontsDir, [
-      "Inter_24pt-Medium.ttf",
-      "Inter_18pt-Medium.ttf",
-      "Inter-Medium.ttf",
-      "Cairo-Medium.ttf",
-      "NotoSans-Medium.ttf",
-      "NotoSansArabic-Medium.ttf",
-    ]) || Regular;
+  // Cairo candidates (Arabic shaping)
+  const cairoRegular = localFont("Cairo-Regular.ttf");
+  const cairoSemi = localFont("Cairo-SemiBold.ttf") || cairoRegular;
+  const cairoBold = localFont("Cairo-Bold.ttf") || cairoSemi;
 
-  const SemiBold =
-    pickFirst(fontsDir, [
-      "Inter_24pt-SemiBold.ttf",
-      "Inter_18pt-SemiBold.ttf",
-      "Inter-SemiBold.ttf",
-      "Cairo-SemiBold.ttf",
-      "NotoSans-SemiBold.ttf",
-      "NotoSansArabic-SemiBold.ttf",
-    ]) || Medium;
+  if (prioritizeCairo && cairoRegular) {
+    Font.register({
+      family: "Cairo",
+      fonts: [
+        { src: cairoRegular, fontWeight: 400 },
+        { src: cairoSemi!, fontWeight: 600 },
+        { src: cairoBold!, fontWeight: 700 },
+      ],
+    });
+    __selectedFamily = "Cairo";
+    return { family: "Cairo" };
+  }
 
-  const Bold =
-    pickFirst(fontsDir, [
-      "Inter_24pt-Bold.ttf",
-      "Inter_18pt-Bold.ttf",
-      "Inter-Bold.ttf",
-      "Cairo-Bold.ttf",
-      "NotoSans-Bold.ttf",
-      "NotoSansArabic-Bold.ttf",
-    ]) || SemiBold;
-
-  if (Regular) {
+  if (interRegular) {
     Font.register({
       family: "Inter",
       fonts: [
-        { src: Regular, fontWeight: 400 },
-        { src: Medium!, fontWeight: 500 },
-        { src: SemiBold!, fontWeight: 600 },
-        { src: Bold!, fontWeight: 700 },
+        { src: interRegular, fontWeight: 400 },
+        { src: interMedium!, fontWeight: 500 },
+        { src: interSemi!, fontWeight: 600 },
+        { src: interBold!, fontWeight: 700 },
       ],
     });
     __selectedFamily = "Inter";
-    return { family: "Inter", registered: true };
-  } else {
-    // لا نسجّل أي عائلة — سنستخدم Helvetica المدمجة
-    __selectedFamily = "Helvetica";
-    console.warn(
-      "[PDF fonts] Inter/Cairo/Noto not found under public/fonts/static — using Helvetica fallback."
-    );
-    return { family: "Helvetica", registered: false };
+    return { family: "Inter" };
   }
+
+  // لم نجد ملفات خطوط — نستخدم Helvetica المدمجة
+  __selectedFamily = "Helvetica";
+  return { family: "Helvetica" };
 }
 
-/* ========= Styles (dependent on family) ========= */
+/* ========= Styles (built per selected family) ========= */
 function buildStyles(fontFamily: string) {
   return StyleSheet.create({
     page: {
       paddingTop: 34,
       paddingBottom: 34,
       paddingHorizontal: 24,
-      fontSize: 10,
+      fontSize: 10, // مصغّر كما اتفقنا
       color: "#102a43",
       fontFamily,
     },
@@ -139,6 +124,8 @@ function buildStyles(fontFamily: string) {
     spaceBetween: { justifyContent: "space-between" },
     header: { marginBottom: 14 },
     brandWrap: { flexDirection: "row", alignItems: "center", gap: 8 },
+
+    // شعار + glow ناعم
     logoWrap: {
       width: 44,
       height: 44,
@@ -156,6 +143,7 @@ function buildStyles(fontFamily: string) {
       opacity: 0.18,
     },
     logo: { width: 44, height: 44, borderRadius: 10 },
+
     h1: { fontSize: 15, fontWeight: 700, color: "#0f5ea8" },
     smallMuted: { color: "#5b7083", fontSize: 8.5, marginTop: 2 },
 
@@ -184,6 +172,7 @@ function buildStyles(fontFamily: string) {
       marginBottom: 8,
     },
 
+    // key-value rows
     kvRow: {
       flexDirection: "row",
       borderBottomWidth: 1,
@@ -335,7 +324,7 @@ function ReceiptDoc(d: TeslimatPdfData & { family: string }) {
                 fiyat, teşhis sonrası ayrı bir dosya olarak gönderilir.
               </Text>
               <Text style={{ color: "#5b7083", fontSize: 9.5 }}>
-                • Teslim anında görünmeyen gizli hasarlardan, teşhis öncesi
+                • Teslim anında görünmeyen gizli hasarlardan، teşhis öncesi
                 sorumluluk kabul edilmez.
               </Text>
             </View>
@@ -378,14 +367,15 @@ function streamToBuffer(stream: NodeJS.ReadableStream): Promise<Buffer> {
   });
 }
 
-/** Render React-PDF to Buffer (يتعامل مع كل الأشكال: Buffer/Uint8Array/Stream/Blob) */
+/** Render React-PDF to Buffer */
 export async function renderReceiptPdfBuffer(
   data: TeslimatPdfData
 ): Promise<Buffer> {
-  // 1) سجّل الخطوط وحدّد العائلة المختارة
-  const { family } = registerFontsOnce();
+  // اختر العائلة حسب وجود نص عربي (Cairo) أو استخدم Inter
+  const { family } = registerFontsOnce(
+    prefersArabic([data.name, data.address, data.issue, data.companyName || ""])
+  );
 
-  // 2) مرّر العائلة إلى الوثيقة، والـ styles تتولّد بناءً عليها
   const instance = createPdf(<ReceiptDoc {...data} family={family} />);
 
   if (typeof (instance as any).toBuffer === "function") {
