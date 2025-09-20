@@ -9,6 +9,12 @@ import { advanceStatusAction } from "./_actions";
 
 type Row = any[];
 
+/** التوقيع المتوقع من NextStatusButton */
+type ConfirmFn = (id: string) => Promise<{ ok: boolean; next?: StatusKey }>;
+
+/** مهم: عمل alias لنفس Server Action مع cast فقط (بدون أي wrapper) */
+const onConfirmSimple = advanceStatusAction as unknown as ConfirmFn;
+
 export default function CustomerTable({ rows }: { rows: Row[] }) {
   return (
     <div className="space-y-4">
@@ -16,12 +22,12 @@ export default function CustomerTable({ rows }: { rows: Row[] }) {
       <ul className="md:hidden space-y-3">
         {rows?.map((r) => {
           const id = r[0];
-          const name = r[1] ?? "";
-          const phone = r[2] ?? "";
-          const address = r[3] ?? "";
-          const device = r[4] ?? "";
-          const issue = r[5] ?? "";
-          const cost = r[6] ?? "";
+          const name = (r[1] ?? "") as string;
+          const phone = (r[2] ?? "") as string;
+          const address = (r[3] ?? "") as string;
+          const device = (r[4] ?? "") as string;
+          const issue = (r[5] ?? "") as string;
+          const cost = (r[6] ?? "") as string;
           const rawStatus = (r[7] ?? "picked_up") as string;
           const createdRaw = r[8] ?? "";
           const updatedRaw = r[9] ?? "";
@@ -35,9 +41,11 @@ export default function CustomerTable({ rows }: { rows: Row[] }) {
               <div className="flex items-start justify-between gap-3">
                 <div>
                   <div className="text-base font-semibold leading-6">
-                    {name}
+                    {name || "—"}
                   </div>
-                  <div className="mt-1 text-sm text-neutral-600">{phone}</div>
+                  <div className="mt-1 text-sm text-neutral-600">
+                    {phone || "—"}
+                  </div>
                 </div>
                 <StatusBadge status={normalized} />
               </div>
@@ -60,7 +68,7 @@ export default function CustomerTable({ rows }: { rows: Row[] }) {
                 <NextStatusButton
                   id={id}
                   currentStatus={rawStatus}
-                  onConfirm={advanceStatusAction}
+                  onConfirm={onConfirmSimple}
                 />
                 <Link
                   href={`/customers/${id}`}
@@ -95,12 +103,12 @@ export default function CustomerTable({ rows }: { rows: Row[] }) {
           <tbody>
             {rows?.map((r) => {
               const id = r[0];
-              const name = r[1] ?? "";
-              const phone = r[2] ?? "";
-              const address = r[3] ?? "";
-              const device = r[4] ?? "";
-              const issue = r[5] ?? "";
-              const cost = r[6] ?? "";
+              const name = (r[1] ?? "") as string;
+              const phone = (r[2] ?? "") as string;
+              const address = (r[3] ?? "") as string;
+              const device = (r[4] ?? "") as string;
+              const issue = (r[5] ?? "") as string;
+              const cost = (r[6] ?? "") as string;
               const rawStatus = (r[7] ?? "picked_up") as string;
               const createdRaw = r[8] ?? "";
               const updatedRaw = r[9] ?? "";
@@ -113,7 +121,7 @@ export default function CustomerTable({ rows }: { rows: Row[] }) {
                   <td className="p-3">{address}</td>
                   <td className="p-3">{device}</td>
                   <td className="p-3">{issue}</td>
-                  <td className="p-3">{cost}</td>
+                  <td className="p-3">{cost || "—"}</td>
                   <td className="p-3">
                     <StatusBadge status={normalized} />
                   </td>
@@ -127,7 +135,7 @@ export default function CustomerTable({ rows }: { rows: Row[] }) {
                     <NextStatusButton
                       id={id}
                       currentStatus={rawStatus}
-                      onConfirm={advanceStatusAction}
+                      onConfirm={onConfirmSimple}
                     />
                   </td>
                   <td className="p-3 text-right">

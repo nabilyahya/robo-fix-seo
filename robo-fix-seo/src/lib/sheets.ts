@@ -34,12 +34,16 @@ export async function sheetsClient() {
 
 export const SHEET_NAME = "Customers" as const;
 
-/** ✅ التخطيط الجديد: حتى العمود L (12 عمودًا) */
+/** ✅ ما زلنا نضيف صفوف جديدة حتى L (12 عمودًا) */
 const RANGE_12 = `${SHEET_NAME}!A:L` as const;
 
-/** ✅ صف العميل حسب التخطيط الجديد */
+/** ✅ القراءة أصبحت حتى P لجلب حقول المرتجع/التكلفة/الملاحظة */
+const LAST_COL = "P" as const;
+const RANGE_ALL = `${SHEET_NAME}!A:${LAST_COL}` as const;
+
+/** صف العميل (حتى P). الأعمدة الأخيرة اختيارية للحفاظ على التوافق */
 export type CustomerRow = [
-  string, // A: ID (رقم بسيط كسلسلة)
+  string, // A: ID
   string, // B: Name
   string, // C: Phone
   string, // D: Address
@@ -49,12 +53,31 @@ export type CustomerRow = [
   string, // H: Status
   string, // I: CreatedAt (ISO)
   string, // J: UpdatedAt (ISO)
-  string, // K: PublicId / ReceiptNo (RN-YYYY-2xxxxx)
-  string // L: PassCode (6 أرقام)
+  string, // K: PublicId / ReceiptNo
+  string, // L: PassCode
+  string?, // M: (محجوز)
+  string?, // N: return_reason
+  string?, // O: extra_cost
+  string? // P: diagnosis_note
 ];
 
 /** Append (12-col) */
-export async function appendCustomerRow12(row: CustomerRow) {
+export async function appendCustomerRow12(
+  row: [
+    string,
+    string,
+    string,
+    string,
+    string,
+    string,
+    string,
+    string,
+    string,
+    string,
+    string,
+    string
+  ]
+) {
   const sheets = await sheetsClient();
   await sheets.spreadsheets.values.append({
     spreadsheetId: process.env.GOOGLE_SHEETS_ID!,
@@ -64,15 +87,15 @@ export async function appendCustomerRow12(row: CustomerRow) {
   });
 }
 
-/** 🔁 إبقاء الاسم القديم شغال كـ alias (لتجنّب كسر الاستيرادات القديمة) */
+/** إبقاء الاسم القديم كـ alias */
 export const appendCustomer = appendCustomerRow12;
 
-/** Load ALL values (including header) — 12 cols */
+/** Load ALL values (including header) — حتى P */
 async function loadValues(): Promise<string[][]> {
   const sheets = await sheetsClient();
   const res = await sheets.spreadsheets.values.get({
     spreadsheetId: process.env.GOOGLE_SHEETS_ID!,
-    range: RANGE_12,
+    range: RANGE_ALL,
   });
   return (res.data.values ?? []) as string[][];
 }
@@ -82,19 +105,20 @@ export async function readAll(): Promise<{ rows: CustomerRow[] }> {
   const values = await loadValues();
   if (values.length <= 1) return { rows: [] };
   const body = values.slice(1);
-  // نسمح بصفوف ناقصة مؤقتًا ثم نفرّغها لسلسلة:
+
+  // نملأ حتى 16 خانة (A..P) لضمان وجود المؤشرات 11..15
   const rows = body
     .filter((r) => r && r.length >= 2)
     .map(
       (r) =>
-        Array.from({ length: 12 }, (_, i) =>
+        Array.from({ length: 16 }, (_, i) =>
           (r[i] ?? "").toString()
         ) as CustomerRow
     );
   return { rows };
 }
 
-/** ✅ ID بالعمود A — يعيد فهرس 1-based و الصف */
+/** ✅ ID بالعمود A — يعيد فهرس 1-based والصف */
 export async function findRowById(id: string) {
   const values = await loadValues();
   let rowIndex = -1;
@@ -104,7 +128,6 @@ export async function findRowById(id: string) {
   for (let i = 1; i < values.length; i++) {
     const cell = (values[i]?.[0] ?? "").toString().trim();
 
-    // طابق كنص أولاً، ثم طابق كرقم
     const sameText = cell === wanted;
     const sameNumber =
       cell !== "" &&
@@ -114,7 +137,7 @@ export async function findRowById(id: string) {
       Number(cell) === Number(wanted);
 
     if (sameText || sameNumber) {
-      rowIndex = i + 1; // 1-based للـ Sheets
+      rowIndex = i + 1; // 1-based
       break;
     }
   }
@@ -125,18 +148,18 @@ export async function findRowById(id: string) {
   };
 }
 
-/** ✅ البحث برقم الفيش (K = index 10) — متروك للتوافق */
+/** البحث برقم الفيش (K = index 10) */
 export async function findRowByPublicId(publicId: string) {
   const sheets = await sheetsClient();
   const res = await sheets.spreadsheets.values.get({
     spreadsheetId: process.env.GOOGLE_SHEETS_ID!,
-    range: `${SHEET_NAME}!A:Z`, // نأتي بالصف كاملًا
+    range: `${SHEET_NAME}!A:Z`, // يكفي ويزيد
   });
   const values = (res.data.values ?? []) as string[][];
   let rowIndex = -1;
   for (let i = 1; i < values.length; i++) {
     if ((values[i][10] || "").trim() === publicId.trim()) {
-      rowIndex = i + 1; // 1-based
+      rowIndex = i + 1;
       break;
     }
   }
@@ -146,7 +169,7 @@ export async function findRowByPublicId(publicId: string) {
   };
 }
 
-/** ✅ NEW: البحث بواسطة رمز الفيش فقط (L = index 11) */
+/** NEW: البحث بواسطة رمز الفيش (L = index 11) */
 export async function findRowByPassCode(passCode: string): Promise<{
   rowIndex: number; // 1-based
   row: any[] | null;
@@ -154,7 +177,7 @@ export async function findRowByPassCode(passCode: string): Promise<{
   const sheets = await sheetsClient();
   const res = await sheets.spreadsheets.values.get({
     spreadsheetId: process.env.GOOGLE_SHEETS_ID!,
-    range: RANGE_12, // يكفي حتى L
+    range: RANGE_ALL, // ✅ حتى P
   });
   const values = (res.data.values ?? []) as string[][];
   let rowIndex = -1;
@@ -163,7 +186,7 @@ export async function findRowByPassCode(passCode: string): Promise<{
   for (let i = 1; i < values.length; i++) {
     const cell = (values[i]?.[11] ?? "").toString().trim(); // L = index 11
     if (cell === wanted) {
-      rowIndex = i + 1; // 1-based
+      rowIndex = i + 1;
       break;
     }
   }
@@ -185,7 +208,7 @@ export async function updateCells(range: string, values: any[][]) {
   });
 }
 
-/* -------------------- أدوات مساعدة للمُنشئ -------------------- */
+/* -------------------- أدوات مساعدة -------------------- */
 
 /** احصل على أكبر ID في العمود A ثم +1 */
 export async function getNextNumericId(): Promise<number> {

@@ -81,7 +81,18 @@ export default function CustomersClient({
   const isUsta = roleKey === "usta";
   const isAdmin = roleKey === "admin";
 
+  // ===== refresh بعد الـ actions =====
+  const router = useRouter();
+  const [isPending, startTransition] = useTransition();
+  const withRefresh = async <T,>(fn: () => Promise<T>): Promise<T> => {
+    const res = await fn();
+    startTransition(() => router.refresh());
+    return res;
+  };
+
+  // حقول البحث
   const [q, setQ] = useState("");
+  const [passQ, setPassQ] = useState(""); // 🔎 بحث برمز الفيش
   const [status, setStatus] = useState<"" | StatusKey>("");
   const [sort, setSort] = useState<
     | "updated_desc"
@@ -92,15 +103,6 @@ export default function CustomersClient({
     | "name_desc"
   >("updated_desc");
   const [openFilters, setOpenFilters] = useState(false);
-
-  // ===== refresh بعد الـ actions =====
-  const router = useRouter();
-  const [isPending, startTransition] = useTransition();
-  const withRefresh = async <T,>(fn: () => Promise<T>): Promise<T> => {
-    const res = await fn();
-    startTransition(() => router.refresh());
-    return res;
-  };
 
   // خيارات الحالة (حسب الدور)
   const statusOptions = useMemo(() => {
@@ -133,7 +135,7 @@ export default function CustomersClient({
         )
           continue;
       }
-      s.add(normalized);
+      s.add(normalized as StatusKey);
     }
     return Array.from(s);
   }, [safeRows, isKargo, isUsta]);
@@ -141,6 +143,7 @@ export default function CustomersClient({
   // فلترة
   const filtered = useMemo(() => {
     const qq = q.trim().toLowerCase();
+    const pq = passQ.trim().toLowerCase();
 
     return safeRows.filter((r) => {
       const name = (r[1] ?? "") as string;
@@ -149,6 +152,11 @@ export default function CustomersClient({
       const device = (r[4] ?? "") as string;
       const issue = (r[5] ?? "") as string;
       const st = normalizeStatus((r[7] ?? "picked_up") as string) as StatusKey;
+
+      const passCode = String(r[11] ?? ""); // ✅ L = index 11 (0-based)
+      const returnReason = (r[13] ?? "") as string; // N
+      const extraCost = String(r[14] ?? ""); // O
+      const diagNote = String(r[15] ?? ""); // P
 
       if (isKargo) {
         if (
@@ -178,14 +186,15 @@ export default function CustomersClient({
 
       if (status && st !== status) return false;
 
+      // بحث برمز الفيش
+      if (pq && !passCode.toLowerCase().includes(pq)) return false;
+
       if (!qq) return true;
-      // سبب المرتجع في N => index 13
-      const returnReason = (r[13] ?? "") as string;
       const haystack =
-        `${name} ${phone} ${address} ${device} ${issue} ${returnReason}`.toLowerCase();
+        `${name} ${phone} ${address} ${device} ${issue} ${returnReason} ${passCode} ${extraCost} ${diagNote}`.toLowerCase();
       return haystack.includes(qq);
     });
-  }, [safeRows, q, status, isKargo, isUsta]);
+  }, [safeRows, q, passQ, status, isKargo, isUsta]);
 
   // ترتيب
   const sorted = useMemo(() => {
@@ -197,20 +206,21 @@ export default function CustomersClient({
       const wb = STATUS_SORT_WEIGHT[sb] ?? 50;
       if (wa !== wb) return wa - wb;
 
-      if (sort === "name_asc" || sort === "name_desc") {
+      const sortKey = sort;
+      if (sortKey === "name_asc" || sortKey === "name_desc") {
         const cmp = String(a[1] ?? "").localeCompare(String(b[1] ?? ""), "ar");
-        return sort === "name_asc" ? cmp : -cmp;
+        return sortKey === "name_asc" ? cmp : -cmp;
       }
-      if (sort === "created_desc" || sort === "created_asc") {
+      if (sortKey === "created_desc" || sortKey === "created_asc") {
         const av = parseDMYToEpoch(a[8]);
         const bv = parseDMYToEpoch(b[8]);
         if (av == null || bv == null) return 0;
-        return sort === "created_desc" ? bv - av : av - bv;
+        return sortKey === "created_desc" ? bv - av : av - bv;
       }
       const av = parseDMYToEpoch(a[9]);
       const bv = parseDMYToEpoch(b[9]);
       if (av == null || bv == null) return 0;
-      return sort === "updated_asc" ? av - bv : bv - av;
+      return sortKey === "updated_asc" ? av - bv : bv - av;
     });
     return arr;
   }, [filtered, sort]);
@@ -296,15 +306,42 @@ export default function CustomersClient({
       } as any)
     );
 
-  async function chooseReturnReason(): Promise<ReturnReason | null> {
-    const msg =
-      "سبب المرتجع:\n1) عدم الاتفاق على السعر\n2) عدم تواجد قطع\n\nأدخل 1 أو 2";
-    const r = window.prompt(msg, "1");
-    if (!r) return null;
-    const v = r.trim();
-    if (v === "1") return "price_disagreement";
-    if (v === "2") return "no_parts";
-    return null;
+  // Usta: إنهاء الفحص -> جمع ملاحظة وتكلفة إضافية ثم الانتقال إلى checked_waiting_ok
+  const ustaFinishCheck = (id: string, rawStatus: string) =>
+    withRefresh(async () => {
+      const note = window.prompt("اكتب ملاحظة/عذر الفحص:", "") ?? undefined;
+      if (note === undefined) return { ok: false };
+
+      let extra: string | undefined = undefined;
+      const hasExtra = window.confirm("هل توجد تكاليف إضافية؟");
+      if (hasExtra) {
+        const v = window.prompt("قيمة التكلفة الإضافية (ل.ت):", "");
+        if (v === null) return { ok: false };
+        extra = v.trim();
+      }
+      return advanceStatusAction({
+        id,
+        currentStatus: rawStatus,
+        forceNext: "checked_waiting_ok",
+        meta: { diagnosis_note: note ?? "", extra_cost: extra ?? "" },
+      } as any);
+    });
+
+  // Copy helper
+  async function copy(text: string) {
+    try {
+      await navigator.clipboard.writeText(text);
+      alert("تم نسخ رمز الفيش");
+    } catch {
+      // fallback
+      const ta = document.createElement("textarea");
+      ta.value = text;
+      document.body.appendChild(ta);
+      ta.select();
+      document.execCommand("copy");
+      document.body.removeChild(ta);
+      alert("تم نسخ رمز الفيش");
+    }
   }
 
   return (
@@ -363,10 +400,10 @@ export default function CustomersClient({
               openFilters ? "block" : "hidden"
             } md:block`}
           >
-            <div className="grid grid-cols-1 md:grid-cols-4 gap-3">
+            <div className="grid grid-cols-1 md:grid-cols-5 gap-3">
               <div className="md:col-span-2">
                 <label htmlFor="q" className="sr-only">
-                  بحث
+                  بحث عام
                 </label>
                 <div className="relative">
                   <input
@@ -387,6 +424,20 @@ export default function CustomersClient({
                     />
                   </svg>
                 </div>
+              </div>
+
+              {/* 🔎 بحث برمز الفيش */}
+              <div>
+                <label htmlFor="passq" className="sr-only">
+                  رمز الفيش
+                </label>
+                <input
+                  id="passq"
+                  value={passQ}
+                  onChange={(e) => setPassQ(e.target.value)}
+                  placeholder="بحث برمز الفيش (L)"
+                  className="w-full rounded-xl border border-slate-300 bg-white px-3 py-2.5 text-slate-900 shadow-sm outline-none focus:border-emerald-500 focus:ring-4 focus:ring-emerald-200"
+                />
               </div>
 
               <div>
@@ -454,7 +505,8 @@ export default function CustomersClient({
             onConfirmSimple={onConfirmSimple}
             forceApprove={forceApprove}
             forceReturn={forceReturn}
-            chooseReturnReason={chooseReturnReason}
+            ustaFinishCheck={ustaFinishCheck}
+            copy={copy}
             isPending={isPending}
             isKargo={isKargo}
             isUsta={isUsta}
@@ -473,7 +525,8 @@ function CustomerTable({
   onConfirmSimple,
   forceApprove,
   forceReturn,
-  chooseReturnReason,
+  ustaFinishCheck,
+  copy,
   isPending,
   isKargo,
   isUsta,
@@ -488,7 +541,8 @@ function CustomerTable({
     rawStatus: string,
     rr: "price_disagreement" | "no_parts"
   ) => Promise<any>;
-  chooseReturnReason: () => Promise<"price_disagreement" | "no_parts" | null>;
+  ustaFinishCheck: (id: string, rawStatus: string) => Promise<any>;
+  copy: (text: string) => Promise<void>;
   isPending: boolean;
   isKargo: boolean;
   isUsta: boolean;
@@ -505,11 +559,14 @@ function CustomerTable({
           const address = (r[3] ?? "") as string;
           const device = (r[4] ?? "") as string;
           const issue = (r[5] ?? "") as string;
-          const cost = (r[6] ?? "") as string;
+          const cost = (r[6] ?? "") as string; // G
           const rawStatus = (r[7] ?? "picked_up") as string;
           const createdRaw = r[8] ?? "";
           const updatedRaw = r[9] ?? "";
-          const returnReason = (r[13] ?? "") as string;
+          const passCode = String(r[11] ?? ""); // L
+          const returnReason = (r[13] ?? "") as string; // N
+          const extraCost = String(r[14] ?? ""); // O
+          const diagNote = String(r[15] ?? ""); // P
 
           const status = normalizeStatus(rawStatus) as StatusKey;
           const phoneDigits = sanitizePhone(phone);
@@ -589,6 +646,25 @@ function CustomerTable({
                   label="الحالة"
                   value={ACTION_LABELS[status] ?? status.replaceAll("_", " ")}
                 />
+
+                {/* رمز الفيش — يظهر لـ Usta/Admin فقط */}
+                {(isUsta || isAdmin) && (
+                  <div className="flex items-start justify-between gap-3">
+                    <span className="text-neutral-500">رمز الفيش</span>
+                    <span className="text-neutral-900 text-right">
+                      {passCode || "—"}
+                      {passCode && (
+                        <button
+                          onClick={() => copy(passCode)}
+                          className="ml-2 inline-flex items-center px-2 py-0.5 text-xs rounded-lg border border-slate-300 hover:bg-slate-50"
+                        >
+                          نسخ
+                        </button>
+                      )}
+                    </span>
+                  </div>
+                )}
+
                 {showReturnReason && (
                   <InfoRow
                     label="سبب المرتجع"
@@ -601,6 +677,15 @@ function CustomerTable({
                     }
                   />
                 )}
+
+                {/* تفاصيل إضافية للـ Admin */}
+                {isAdmin && diagNote && (
+                  <InfoRow label="ملاحظة الفحص" value={diagNote} clamp />
+                )}
+                {isAdmin && (
+                  <InfoRow label="تكلفة إضافية" value={extraCost || "—"} />
+                )}
+
                 <InfoRow label="الجهاز" value={device || "—"} clamp />
                 <InfoRow label="التكلفة" value={cost || "—"} />
                 <div className="mt-1 flex items-center justify-between">
@@ -645,8 +730,16 @@ function CustomerTable({
               {/* أزرار الحالة */}
               <div className="mt-2 flex items-center justify-between gap-2">
                 <div className="flex items-center gap-2">
-                  {/* Usta: يقرر موافقة/مرتجع في checked_waiting_ok */}
-                  {isUsta && status === "checked_waiting_ok" ? (
+                  {/* Usta: إنهاء الفحص من checking مع إدخال الملاحظة/التكلفة */}
+                  {isUsta && status === "checking" ? (
+                    <button
+                      className="inline-flex items-center gap-2 px-3 py-2 rounded-xl border border-amber-300 bg-amber-50 hover:bg-amber-100 text-amber-800 disabled:opacity-50"
+                      onClick={() => ustaFinishCheck(id, rawStatus)}
+                      disabled={isPending}
+                    >
+                      إنهاء الفحص — بانتظار الموافقة
+                    </button>
+                  ) : isUsta && status === "checked_waiting_ok" ? (
                     <>
                       <button
                         className="inline-flex items-center gap-2 px-3 py-2 rounded-xl border border-emerald-300 bg-emerald-50 hover:bg-emerald-100 text-emerald-800 disabled:opacity-50"
@@ -658,9 +751,16 @@ function CustomerTable({
                       <button
                         className="inline-flex items-center gap-2 px-3 py-2 rounded-xl border border-fuchsia-300 bg-fuchsia-50 hover:bg-fuchsia-100 text-fuchsia-800 disabled:opacity-50"
                         onClick={async () => {
-                          const rr = await chooseReturnReason();
-                          if (!rr) return;
-                          await forceReturn(id, rawStatus, rr);
+                          const r = window.prompt(
+                            "سبب المرتجع:\n1) عدم الاتفاق على السعر\n2) عدم تواجد قطع",
+                            "1"
+                          );
+                          if (!r) return;
+                          const rr =
+                            r.trim() === "2"
+                              ? "no_parts"
+                              : "price_disagreement";
+                          await forceReturn(id, rawStatus, rr as any);
                         }}
                         disabled={isPending}
                       >
@@ -678,17 +778,19 @@ function CustomerTable({
                         تم توصيل المرتجع
                       </button>
                     ) : (
+                      (
                         [
                           "pending_picked_up",
                           "repaired_waiting_del",
                         ] as StatusKey[]
-                      ).includes(status) ? (
-                      <NextStatusButton
-                        id={id}
-                        currentStatus={rawStatus}
-                        onConfirm={onConfirmSimple}
-                      />
-                    ) : null
+                      ).includes(status) && (
+                        <NextStatusButton
+                          id={id}
+                          currentStatus={rawStatus}
+                          onConfirm={onConfirmSimple}
+                        />
+                      )
+                    )
                   ) : (
                     // أدوار أخرى (مثل Admin)
                     <NextStatusButton
@@ -727,6 +829,22 @@ function CustomerTable({
                 <th className="p-3 font-semibold">العطل</th>
                 <th className="p-3 font-semibold">التكلفة</th>
                 <th className="p-3 font-semibold">الحالة</th>
+                {(isUsta || isAdmin) && (
+                  <th className="p-3 font-semibold whitespace-nowrap">
+                    رمز الفيش (L)
+                  </th>
+                )}
+                {/* تفاصيل إضافية لسهولة قراءة الـ Admin */}
+                {isAdmin && (
+                  <>
+                    <th className="p-3 font-semibold whitespace-nowrap">
+                      ملاحظة الفحص (P)
+                    </th>
+                    <th className="p-3 font-semibold whitespace-nowrap">
+                      تكلفة إضافية (O)
+                    </th>
+                  </>
+                )}
                 <th className="p-3 font-semibold whitespace-nowrap">
                   سبب المرتجع
                 </th>
@@ -748,11 +866,14 @@ function CustomerTable({
                 const address = r[3] ?? "";
                 const device = r[4] ?? "";
                 const issue = r[5] ?? "";
-                const cost = r[6] ?? "";
+                const cost = r[6] ?? ""; // G
                 const rawStatus = (r[7] ?? "picked_up") as string;
                 const createdRaw = r[8] ?? "";
                 const updatedRaw = r[9] ?? "";
-                const returnReason = r[13] ?? "";
+                const passCode = String(r[11] ?? ""); // L
+                const returnReason = r[13] ?? ""; // N
+                const extraCost = String(r[14] ?? ""); // O
+                const diagNote = String(r[15] ?? ""); // P
                 const status = normalizeStatus(rawStatus) as StatusKey;
 
                 if (
@@ -815,6 +936,36 @@ function CustomerTable({
                     <td className="p-3">
                       <StatusBadge status={status} />
                     </td>
+
+                    {(isUsta || isAdmin) && (
+                      <td className="p-3 whitespace-nowrap">
+                        {passCode || "—"}{" "}
+                        {passCode && (
+                          <button
+                            onClick={() => copy(passCode)}
+                            className="ml-2 inline-flex items-center px-2 py-0.5 text-xs rounded-lg border border-slate-300 hover:bg-slate-50"
+                          >
+                            نسخ
+                          </button>
+                        )}
+                      </td>
+                    )}
+
+                    {/* أعمدة الـ Admin: الملاحظة والتكلفة الإضافية */}
+                    {isAdmin && (
+                      <>
+                        <td
+                          className="p-3 max-w-[280px] truncate"
+                          title={diagNote}
+                        >
+                          {diagNote || "—"}
+                        </td>
+                        <td className="p-3 whitespace-nowrap">
+                          {extraCost || "—"}
+                        </td>
+                      </>
+                    )}
+
                     <td className="p-3 whitespace-nowrap">
                       {status === "return_waiting_del" ||
                       status === "return_delivered"
@@ -842,31 +993,42 @@ function CustomerTable({
                             تم توصيل المرتجع
                           </button>
                         ) : (
+                          (
                             [
                               "pending_picked_up",
                               "repaired_waiting_del",
                             ] as StatusKey[]
-                          ).includes(status) ? (
-                          <NextStatusButton
-                            id={id}
-                            currentStatus={rawStatus}
-                            onConfirm={onConfirmSimple}
-                          />
-                        ) : null
+                          ).includes(status) && (
+                            <NextStatusButton
+                              id={id}
+                              currentStatus={rawStatus}
+                              onConfirm={onConfirmSimple}
+                            />
+                          )
+                        )
                       ) : isUsta ? (
-                        (
-                          [
-                            "picked_up",
-                            "checking",
-                            "approved_repairing",
-                            "repaired_waiting_del",
-                          ] as StatusKey[]
-                        ).includes(status) && (
-                          <NextStatusButton
-                            id={id}
-                            currentStatus={rawStatus}
-                            onConfirm={onConfirmSimple}
-                          />
+                        status === "checking" ? (
+                          <button
+                            className="inline-flex items-center gap-2 px-3 py-2 rounded-xl border border-amber-300 bg-amber-50 hover:bg-amber-100 text-amber-800 disabled:opacity-50"
+                            onClick={() => ustaFinishCheck(id, rawStatus)}
+                            disabled={isPending}
+                          >
+                            إنهاء الفحص — بانتظار الموافقة
+                          </button>
+                        ) : (
+                          (
+                            [
+                              "picked_up",
+                              "approved_repairing",
+                              "repaired_waiting_del",
+                            ] as StatusKey[]
+                          ).includes(status) && (
+                            <NextStatusButton
+                              id={id}
+                              currentStatus={rawStatus}
+                              onConfirm={onConfirmSimple}
+                            />
+                          )
                         )
                       ) : (
                         <NextStatusButton
@@ -892,7 +1054,7 @@ function CustomerTable({
                           >
                             <path
                               fill="currentColor"
-                              d="M13 5l7 7-7 7v-4H4v-6h9V5z"
+                              d="M13 5ل7 7-7 7v-4H4v-6h9V5z"
                             />
                           </svg>
                         </Link>

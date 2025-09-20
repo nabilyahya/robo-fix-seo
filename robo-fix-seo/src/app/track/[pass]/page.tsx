@@ -54,11 +54,24 @@ export default async function Page({
     lastUpdated, // J
     publicId, // K (görüntüleme)
     _passCode, // L
+    _colM, // M (varsa)
+    returnReasonRaw, // N ✅ سبب المرتجع
   ] = row as any[];
 
   const status = (normalizeStatus(statusRaw as string) ||
     "picked_up") as StatusKey;
   const statusLabel = getStatusLabel(status, "tr");
+
+  const isReturnFlow =
+    status === "return_waiting_del" || status === "return_delivered";
+
+  // عرض سبب المرتجع (TR)
+  const returnReasonTr =
+    returnReasonRaw === "price_disagreement"
+      ? "Fiyat anlaşmazlığı"
+      : returnReasonRaw === "no_parts"
+      ? "Parça bulunamadı"
+      : "";
 
   return (
     <div
@@ -109,6 +122,15 @@ export default async function Page({
           <p className="mt-3 text-neutral-700">
             Durumunuz düzenli olarak güncellenir.
           </p>
+
+          {/* توضيح إضافي لمسار المرتجع */}
+          {isReturnFlow && (
+            <div className="mt-3 rounded-2xl border border-fuchsia-200 bg-fuchsia-50 text-fuchsia-900 p-3 text-sm">
+              {status === "return_waiting_del"
+                ? "İade süreci başlatıldı. Kuryemiz ürünü size teslim edecektir."
+                : "İade teslimi tamamlandı."}
+            </div>
+          )}
         </div>
 
         {/* Info Cards */}
@@ -117,6 +139,9 @@ export default async function Page({
           <Card title="Durum" value={statusLabel} />
           <Card title="Cihaz" value={deviceType || "—"} />
           <Card title="Arıza" value={issue || "—"} />
+          {isReturnFlow && (
+            <Card title="İade Nedeni" value={returnReasonTr || "—"} />
+          )}
           <Card
             title="Adres"
             value={address || "—"}
@@ -140,16 +165,20 @@ export default async function Page({
               label="Son güncelleme"
               value={formatSheetDate(lastUpdated || createdAt)}
             />
+            {isReturnFlow && (
+              <TimelineItem
+                label="İade Durumu"
+                value={
+                  status === "return_waiting_del"
+                    ? "Teslimat bekliyor"
+                    : "İade müşteriye teslim edildi"
+                }
+              />
+            )}
           </ul>
 
           {/* Bottom actions */}
           <div className="mt-6 flex flex-wrap items-center gap-3">
-            {/* <a
-              href="/track"
-              className="inline-flex items-center gap-2 px-4 py-2 rounded-xl border border-slate-300 text-slate-700 hover:bg-slate-50"
-            >
-              ← Yeni sorgu
-            </a> */}
             <a
               href="/"
               className="inline-flex items-center gap-2 px-4 py-2 rounded-xl bg-gradient-to-br from-[#1e88e5] to-[#26c6da] text-white hover:opacity-95"

@@ -1,12 +1,15 @@
 "use client";
 
 import { useMemo, useState, useTransition } from "react";
-import { normalizeStatus, STATUSES } from "@/components/StatusBadge";
+import {
+  normalizeStatus,
+  STATUSES,
+  type StatusKey, // ✅ النوع القادم من StatusBadge (يشمل حالات المرتجع)
+} from "@/components/StatusBadge";
 import { getNextStatus } from "@/lib/status-flow";
-import type { StatusKey } from "@/lib/status-flow";
 
 /** عنوان الزر بحسب "الحالة الهدف" (المرحلة التالية) */
-const NEXT_LABEL_BY_TARGET: Record<StatusKey, string | null> = {
+const NEXT_LABEL_BY_TARGET: Partial<Record<StatusKey, string | null>> = {
   picked_up: "تم الاستلام", // من بانتظار الجلب -> تم جلب الجهاز
   checking: "بدء الفحص",
   checked_waiting_ok: "إنهاء الفحص",
@@ -14,14 +17,19 @@ const NEXT_LABEL_BY_TARGET: Record<StatusKey, string | null> = {
   repaired_waiting_del: "إنهاء التصليح",
   delivered_success: "تسليم للعميل",
 
-  // غير مستخدمة كهدف مباشر للأزرار:
+  // مسار المرتجع
+  return_waiting_del: "تسليم المرتجع",
+  return_delivered: null, // حالة طرفية
+
+  // غير مستخدمة كهدف مباشر للأزرر:
   pending_picked_up: null,
   canceled: null,
 };
 
 type Props = {
   id: string;
-  currentStatus: string; // قد يأتي عربي/تركي — نطبّعه
+  /** قد يأتي عربي/تركي أو StatusKey — نطبّعه داخليًا */
+  currentStatus: string | StatusKey;
   /** Server Action تُرجِع ok + الحالة التالية (اختياري) */
   onConfirm: (id: string) => Promise<{ ok: boolean; next?: StatusKey }>;
 };
@@ -31,19 +39,25 @@ export default function NextStatusButton({
   currentStatus,
   onConfirm,
 }: Props) {
-  const [optimistic, setOptimistic] = useState<StatusKey | null>(null);
+  const [optimistic, setOptimistic] = useState<StatusKey | undefined>();
   const [isPending, startTransition] = useTransition();
   const [toast, setToast] = useState<string | null>(null);
   const [showConfirm, setShowConfirm] = useState(false);
 
   // الحالة الحالية (بعد التطبيع) — نفضّل القيمة المتفائلة عند التحديث
-  const current: StatusKey = optimistic ?? normalizeStatus(currentStatus);
-
-  // احسب المرحلة التالية
-  const next: StatusKey | null = useMemo(
-    () => getNextStatus(current),
-    [current]
+  const current: StatusKey = useMemo(
+    () => (optimistic ?? normalizeStatus(String(currentStatus))) as StatusKey,
+    [optimistic, currentStatus]
   );
+
+  // ✅ لفّ الدالة getNextStatus بـ cast يشمل كل حالات StatusKey الجديدة
+  const next: StatusKey | undefined = useMemo(() => {
+    const flowNext = getNextStatus as unknown as (
+      s: StatusKey
+    ) => StatusKey | null | undefined;
+    const n = flowNext(current);
+    return n ?? undefined;
+  }, [current]);
 
   // نص الزر واللون بحسب "المرحلة القادمة"
   const label = next ? NEXT_LABEL_BY_TARGET[next] ?? "التالي" : null;
@@ -59,9 +73,9 @@ export default function NextStatusButton({
 
     startTransition(async () => {
       try {
-        const res = await onConfirm(id);
-        if (!res.ok) {
-          setOptimistic(null);
+        const res = await onConfirm(String(id));
+        if (!res?.ok) {
+          setOptimistic(undefined);
           setToast("تعذر تحديث الحالة. حاول مجددًا.");
           setTimeout(() => setToast(null), 2200);
           return;
@@ -69,7 +83,7 @@ export default function NextStatusButton({
         setToast("تم التحديث بنجاح ✅");
         setTimeout(() => setToast(null), 1500);
       } catch {
-        setOptimistic(null);
+        setOptimistic(undefined);
         setToast("حدث خطأ غير متوقع.");
         setTimeout(() => setToast(null), 2200);
       } finally {
