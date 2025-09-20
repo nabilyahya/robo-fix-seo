@@ -17,12 +17,23 @@ export const STATUSES = {
     label: "تم التصليح – بانتظار التوصيل",
     color: "bg-purple-600",
   },
+
+  // ✅ حالات المرتجع الجديدة
+  return_waiting_del: {
+    label: "مرتجع – بانتظار التوصيل",
+    color: "bg-fuchsia-600",
+  },
+  return_delivered: {
+    label: "تم توصيل المرتجع",
+    color: "bg-emerald-700",
+  },
+
   delivered_success: { label: "تم التوصيل – نجاح", color: "bg-emerald-600" },
 } as const;
 
 export type StatusKey = keyof typeof STATUSES;
 
-// تسميات تركية فقط للعرض (لا تغيّر المفاتيح)
+// TR labels (عرض فقط)
 const TR_LABELS: Record<StatusKey, string> = {
   pending_picked_up: "Alım bekleniyor",
   picked_up: "Cihaz teslim alındı",
@@ -31,6 +42,11 @@ const TR_LABELS: Record<StatusKey, string> = {
   checked_waiting_ok: "İnceleme tamamlandı – onay bekleniyor",
   approved_repairing: "Onaylandı – onarım sürüyor",
   repaired_waiting_del: "Onarım tamamlandı – teslimat bekliyor",
+
+  // ✅
+  return_waiting_del: "İade – teslimat bekliyor",
+  return_delivered: "İade müşteriye teslim edildi",
+
   delivered_success: "Teslimat başarıyla gerçekleştirildi",
 };
 
@@ -58,10 +74,22 @@ export function normalizeStatus(input?: string | null): StatusKey {
     "تم التصليح بانتظار التوصيل": "repaired_waiting_del",
     "تم التوصيل نجاح": "delivered_success",
     "تم الغاء الطلب": "canceled",
+
+    // ✅ المرتجع
+    "مرتجع بانتظار التوصيل": "return_waiting_del",
+    "مرتجع – بانتظار التوصيل": "return_waiting_del",
+    "تم توصيل المرتجع": "return_delivered",
   };
   if (exactAr[input]) return exactAr[input];
 
-  // هيوريستكس عربي/تركي
+  // Heuristics: AR/TR
+  if (s.includes("مرتجع") || s.includes("iade")) {
+    if (s.includes("بانتظار") || s.includes("bekliyor"))
+      return "return_waiting_del";
+    if (s.includes("تم توصيل") || s.includes("teslim edildi"))
+      return "return_delivered";
+  }
+
   if (s.includes("جلب")) return "picked_up";
   if (s.includes("فحص"))
     return s.includes("جار") ? "checking" : "checked_waiting_ok";
@@ -70,7 +98,6 @@ export function normalizeStatus(input?: string | null): StatusKey {
   if (s.includes("توصيل")) return "repaired_waiting_del";
   if (s.includes("نجاح")) return "delivered_success";
 
-  // TR
   if (s.includes("inceleme"))
     return s.includes("devam") ? "checking" : "checked_waiting_ok";
   if (s.includes("onay")) return "approved_repairing";
@@ -83,7 +110,6 @@ export function normalizeStatus(input?: string | null): StatusKey {
   return fallback;
 }
 
-/** جلب التسمية حسب اللغة (افتراضي عربي) */
 export function getStatusLabel(
   key: StatusKey,
   locale: "ar" | "tr" = "ar"
@@ -94,7 +120,7 @@ export function getStatusLabel(
 
 export default function StatusBadge({
   status,
-  locale = "ar", // ✅ افتراضي عربي
+  locale = "ar",
 }: {
   status: string | StatusKey;
   locale?: "ar" | "tr";

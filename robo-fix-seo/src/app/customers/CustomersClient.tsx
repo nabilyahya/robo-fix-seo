@@ -1,7 +1,7 @@
-// app/customers/CustomersClient.tsx
 "use client";
 
-import { useMemo, useState } from "react";
+import { useMemo, useState, useTransition } from "react";
+import { useRouter } from "next/navigation";
 import Link from "next/link";
 import StatusBadge, {
   type StatusKey,
@@ -16,10 +16,11 @@ type Row = any[];
 type Props = {
   rows?: Row[] | null;
   showSuccess?: boolean;
-  role?: string; // "Kargo" | "Usta" | ...
-  fetchError?: string; // رسالة خطأ تقنية اختيارية من السيرفر
+  role?: string; // "Kargo" | "Usta" | "Admin" ...
+  fetchError?: string;
 };
 
+// تسميات للعرض فقط
 const ACTION_LABELS: Partial<Record<StatusKey, string>> = {
   pending_picked_up: "تم الاستلام",
   picked_up: "جار الفحص",
@@ -27,15 +28,23 @@ const ACTION_LABELS: Partial<Record<StatusKey, string>> = {
   checked_waiting_ok: "إنهاء التصليح",
   approved_repairing: "تم التصليح بانتظار التوصيل",
   repaired_waiting_del: "تم التوصيل",
+
+  // مسار المرتجع
+  return_waiting_del: "تسليم المرتجع",
+  return_delivered: "تم توصيل المرتجع",
 };
 
 const STATUS_SORT_WEIGHT: Record<StatusKey, number> = {
   checking: 0,
-  approved_repairing: 1,
-  repaired_waiting_del: 2,
-  checked_waiting_ok: 3,
+  checked_waiting_ok: 1,
+  approved_repairing: 2,
+  repaired_waiting_del: 3,
+  return_waiting_del: 3,
+
   delivered_success: 90,
   canceled: 90,
+  return_delivered: 90,
+
   picked_up: 99,
   pending_picked_up: 99,
 } as const;
@@ -70,8 +79,8 @@ export default function CustomersClient({
   const roleKey = (role || "").toLowerCase();
   const isKargo = roleKey === "kargo";
   const isUsta = roleKey === "usta";
+  const isAdmin = roleKey === "admin";
 
-  // واجهة محلية (بدون calls)
   const [q, setQ] = useState("");
   const [status, setStatus] = useState<"" | StatusKey>("");
   const [sort, setSort] = useState<
@@ -84,17 +93,29 @@ export default function CustomersClient({
   >("updated_desc");
   const [openFilters, setOpenFilters] = useState(false);
 
-  // خيارات الحالة (بعد اعتبار الدور)
+  // ===== refresh بعد الـ actions =====
+  const router = useRouter();
+  const [isPending, startTransition] = useTransition();
+  const withRefresh = async <T,>(fn: () => Promise<T>): Promise<T> => {
+    const res = await fn();
+    startTransition(() => router.refresh());
+    return res;
+  };
+
+  // خيارات الحالة (حسب الدور)
   const statusOptions = useMemo(() => {
     const s = new Set<StatusKey>();
     for (const r of safeRows) {
-      const normalized = normalizeStatus(
-        (r[7] ?? "picked_up") as string
-      ) as StatusKey;
+      const normalized = normalizeStatus((r[7] ?? "picked_up") as string);
+
       if (isKargo) {
         if (
           !(
-            ["pending_picked_up", "repaired_waiting_del"] as StatusKey[]
+            [
+              "pending_picked_up",
+              "repaired_waiting_del",
+              "return_waiting_del",
+            ] as StatusKey[]
           ).includes(normalized)
         )
           continue;
@@ -117,7 +138,7 @@ export default function CustomersClient({
     return Array.from(s);
   }, [safeRows, isKargo, isUsta]);
 
-  // فلترة بحسب الدور + البحث + الحالة
+  // فلترة
   const filtered = useMemo(() => {
     const qq = q.trim().toLowerCase();
 
@@ -132,7 +153,11 @@ export default function CustomersClient({
       if (isKargo) {
         if (
           !(
-            ["pending_picked_up", "repaired_waiting_del"] as StatusKey[]
+            [
+              "pending_picked_up",
+              "repaired_waiting_del",
+              "return_waiting_del",
+            ] as StatusKey[]
           ).includes(st)
         )
           return false;
@@ -154,13 +179,15 @@ export default function CustomersClient({
       if (status && st !== status) return false;
 
       if (!qq) return true;
+      // سبب المرتجع في N => index 13
+      const returnReason = (r[13] ?? "") as string;
       const haystack =
-        `${name} ${phone} ${address} ${device} ${issue}`.toLowerCase();
+        `${name} ${phone} ${address} ${device} ${issue} ${returnReason}`.toLowerCase();
       return haystack.includes(qq);
     });
   }, [safeRows, q, status, isKargo, isUsta]);
 
-  // ترتيب: وزن الحالة أولاً (checking أول – لم يبدأ أخير)
+  // ترتيب
   const sorted = useMemo(() => {
     const arr = [...filtered];
     arr.sort((a, b) => {
@@ -188,7 +215,6 @@ export default function CustomersClient({
     return arr;
   }, [filtered, sort]);
 
-  // بطاقات فارغة/خطأ
   function EmptyCard({ roleKey }: { roleKey: string }) {
     let title = "لا توجد نتائج للعرض";
     let desc = "جرّب تعديل الفلاتر أو البحث.";
@@ -244,6 +270,43 @@ export default function CustomersClient({
     );
   }
 
+  // ====== إجراءات مع refresh ======
+  const onConfirmSimple: (
+    id: string
+  ) => Promise<{ ok: boolean; next?: any }> = (id) =>
+    withRefresh(() => advanceStatusAction(id) as any);
+
+  const forceApprove = (id: string, rawStatus: string) =>
+    withRefresh(() =>
+      advanceStatusAction({
+        id,
+        currentStatus: rawStatus,
+        forceNext: "approved_repairing",
+      } as any)
+    );
+
+  type ReturnReason = "price_disagreement" | "no_parts";
+  const forceReturn = (id: string, rawStatus: string, rr: ReturnReason) =>
+    withRefresh(() =>
+      advanceStatusAction({
+        id,
+        currentStatus: rawStatus,
+        forceNext: "return_waiting_del",
+        meta: { return_reason: rr },
+      } as any)
+    );
+
+  async function chooseReturnReason(): Promise<ReturnReason | null> {
+    const msg =
+      "سبب المرتجع:\n1) عدم الاتفاق على السعر\n2) عدم تواجد قطع\n\nأدخل 1 أو 2";
+    const r = window.prompt(msg, "1");
+    if (!r) return null;
+    const v = r.trim();
+    if (v === "1") return "price_disagreement";
+    if (v === "2") return "no_parts";
+    return null;
+  }
+
   return (
     <main className="relative min-h-screen bg-gradient-to-br from-slate-900 via-slate-800 to-emerald-900">
       <div className="pointer-events-none absolute inset-0 opacity-20 mix-blend-overlay [background-image:radial-gradient(#ffffff22_1px,transparent_1px)] [background-size:16px_16px]" />
@@ -258,6 +321,7 @@ export default function CustomersClient({
               عرض وتحديث الحالات حسب دور المستخدم.
             </p>
           </div>
+          {/* زر عميل جديد مخفي للكارجو والستا */}
           {!(isKargo || isUsta) && (
             <Link
               href="/customers/create"
@@ -274,7 +338,7 @@ export default function CustomersClient({
           )}
         </div>
 
-        {/* أدوات الفلترة (زر على الموبايل) */}
+        {/* أدوات الفلترة */}
         <div className="mb-3 md:mb-4">
           <div className="md:hidden mb-2">
             <button
@@ -384,7 +448,18 @@ export default function CustomersClient({
         ) : sorted.length === 0 ? (
           <EmptyCard roleKey={roleKey} />
         ) : (
-          <CustomerTable rows={sorted} role={roleKey} />
+          <CustomerTable
+            rows={sorted}
+            role={roleKey}
+            onConfirmSimple={onConfirmSimple}
+            forceApprove={forceApprove}
+            forceReturn={forceReturn}
+            chooseReturnReason={chooseReturnReason}
+            isPending={isPending}
+            isKargo={isKargo}
+            isUsta={isUsta}
+            isAdmin={isAdmin}
+          />
         )}
       </div>
     </main>
@@ -392,10 +467,33 @@ export default function CustomersClient({
 }
 
 /** ======= الكروت للموبايل + الجدول للديسكتوب ======= */
-function CustomerTable({ rows, role }: { rows: Row[]; role?: string }) {
-  const isKargo = role === "kargo";
-  const isUsta = role === "usta";
-
+function CustomerTable({
+  rows,
+  role,
+  onConfirmSimple,
+  forceApprove,
+  forceReturn,
+  chooseReturnReason,
+  isPending,
+  isKargo,
+  isUsta,
+  isAdmin,
+}: {
+  rows: Row[];
+  role?: string;
+  onConfirmSimple: (id: string) => Promise<{ ok: boolean; next?: any }>;
+  forceApprove: (id: string, rawStatus: string) => Promise<any>;
+  forceReturn: (
+    id: string,
+    rawStatus: string,
+    rr: "price_disagreement" | "no_parts"
+  ) => Promise<any>;
+  chooseReturnReason: () => Promise<"price_disagreement" | "no_parts" | null>;
+  isPending: boolean;
+  isKargo: boolean;
+  isUsta: boolean;
+  isAdmin: boolean;
+}) {
   return (
     <div className="space-y-5">
       {/* Mobile cards */}
@@ -411,6 +509,7 @@ function CustomerTable({ rows, role }: { rows: Row[]; role?: string }) {
           const rawStatus = (r[7] ?? "picked_up") as string;
           const createdRaw = r[8] ?? "";
           const updatedRaw = r[9] ?? "";
+          const returnReason = (r[13] ?? "") as string;
 
           const status = normalizeStatus(rawStatus) as StatusKey;
           const phoneDigits = sanitizePhone(phone);
@@ -418,7 +517,11 @@ function CustomerTable({ rows, role }: { rows: Row[]; role?: string }) {
           if (
             isKargo &&
             !(
-              ["pending_picked_up", "repaired_waiting_del"] as StatusKey[]
+              [
+                "pending_picked_up",
+                "repaired_waiting_del",
+                "return_waiting_del",
+              ] as StatusKey[]
             ).includes(status)
           )
             return null;
@@ -436,13 +539,17 @@ function CustomerTable({ rows, role }: { rows: Row[]; role?: string }) {
           )
             return null;
 
+          const showReturnReason =
+            status === "return_waiting_del" || status === "return_delivered";
+
           return (
             <li
               key={id}
               className="rounded-2xl bg-white/95 backdrop-blur ring-1 ring-black/5 p-4 shadow-md hover:shadow-lg transition border-l-4"
               style={{
                 borderLeftColor:
-                  status === "delivered_success"
+                  status === "delivered_success" ||
+                  status === "return_delivered"
                     ? "#10b981"
                     : status === "picked_up"
                     ? "#3b82f6"
@@ -456,6 +563,8 @@ function CustomerTable({ rows, role }: { rows: Row[]; role?: string }) {
                         ] as StatusKey[]
                       ).includes(status)
                     ? "#f59e0b"
+                    : status === "return_waiting_del"
+                    ? "#a21caf"
                     : "#cbd5e1",
               }}
             >
@@ -480,6 +589,18 @@ function CustomerTable({ rows, role }: { rows: Row[]; role?: string }) {
                   label="الحالة"
                   value={ACTION_LABELS[status] ?? status.replaceAll("_", " ")}
                 />
+                {showReturnReason && (
+                  <InfoRow
+                    label="سبب المرتجع"
+                    value={
+                      returnReason === "no_parts"
+                        ? "عدم تواجد قطع"
+                        : returnReason === "price_disagreement"
+                        ? "عدم الاتفاق على السعر"
+                        : "—"
+                    }
+                  />
+                )}
                 <InfoRow label="الجهاز" value={device || "—"} clamp />
                 <InfoRow label="التكلفة" value={cost || "—"} />
                 <div className="mt-1 flex items-center justify-between">
@@ -491,29 +612,7 @@ function CustomerTable({ rows, role }: { rows: Row[]; role?: string }) {
                 </div>
               </div>
 
-              {/* تفاصيل إضافية قابلة للطي — نخفي العنوان عن Usta */}
-              {((!isUsta && address) || issue) && (
-                <details className="group mt-2">
-                  <summary className="cursor-pointer select-none text-sm text-emerald-700 hover:text-emerald-800 inline-flex items-center gap-2">
-                    عرض التفاصيل
-                    <svg
-                      viewBox="0 0 24 24"
-                      className="h-4 w-4 transition group-open:rotate-180"
-                      aria-hidden="true"
-                    >
-                      <path fill="currentColor" d="M7 10l5 5 5-5z" />
-                    </svg>
-                  </summary>
-                  <div className="mt-2 space-y-1 text-sm">
-                    {!isUsta && (
-                      <InfoRow label="العنوان" value={address || "—"} />
-                    )}
-                    <InfoRow label="العطل" value={issue || "—"} />
-                  </div>
-                </details>
-              )}
-
-              {/* سطر 1: اتصال/واتساب — مخفي بالكامل لـ Usta */}
+              {/* اتصال/واتساب — واتساب مخفي للكارجو */}
               {!isUsta && (
                 <div className="mt-4 flex items-center gap-2">
                   {phoneDigits ? (
@@ -521,18 +620,15 @@ function CustomerTable({ rows, role }: { rows: Row[]; role?: string }) {
                       <a
                         href={`tel:${phoneDigits}`}
                         className="inline-flex items-center gap-2 px-3 py-2 rounded-xl border border-slate-300 bg-white hover:bg-slate-50"
-                        aria-label={`اتصال بـ ${name}`}
                       >
                         اتصال
                       </a>
-                      {/* Kargo بدون واتساب */}
-                      {role !== "kargo" && (
+                      {!isKargo && (
                         <a
                           href={`https://wa.me/${phoneDigits}`}
                           target="_blank"
                           rel="noopener noreferrer"
                           className="inline-flex items-center gap-2 px-3 py-2 rounded-xl border border-slate-300 bg-white hover:bg-slate-50"
-                          aria-label={`واتساب ${name}`}
                         >
                           واتساب
                         </a>
@@ -546,51 +642,68 @@ function CustomerTable({ rows, role }: { rows: Row[]; role?: string }) {
                 </div>
               )}
 
-              {/* سطر 2: تغيير الحالة + التفاصيل — التفاصيل مخفية لـ Usta */}
+              {/* أزرار الحالة */}
               <div className="mt-2 flex items-center justify-between gap-2">
-                <div>
-                  {isKargo ? (
-                    (
-                      [
-                        "pending_picked_up",
-                        "repaired_waiting_del",
-                      ] as StatusKey[]
-                    ).includes(status) ? (
+                <div className="flex items-center gap-2">
+                  {/* Usta: يقرر موافقة/مرتجع في checked_waiting_ok */}
+                  {isUsta && status === "checked_waiting_ok" ? (
+                    <>
+                      <button
+                        className="inline-flex items-center gap-2 px-3 py-2 rounded-xl border border-emerald-300 bg-emerald-50 hover:bg-emerald-100 text-emerald-800 disabled:opacity-50"
+                        onClick={() => forceApprove(id, rawStatus)}
+                        disabled={isPending}
+                      >
+                        تمت الموافقة – جارِ التصليح
+                      </button>
+                      <button
+                        className="inline-flex items-center gap-2 px-3 py-2 rounded-xl border border-fuchsia-300 bg-fuchsia-50 hover:bg-fuchsia-100 text-fuchsia-800 disabled:opacity-50"
+                        onClick={async () => {
+                          const rr = await chooseReturnReason();
+                          if (!rr) return;
+                          await forceReturn(id, rawStatus, rr);
+                        }}
+                        disabled={isPending}
+                      >
+                        مرتجع
+                      </button>
+                    </>
+                  ) : isKargo ? (
+                    // Kargo: زر خاص عند return_waiting_del، والباقي NextStatusButton
+                    status === "return_waiting_del" ? (
+                      <button
+                        className="inline-flex items-center gap-2 px-3 py-2 rounded-xl border border-emerald-300 bg-emerald-50 hover:bg-emerald-100 text-emerald-800 disabled:opacity-50"
+                        onClick={() => onConfirmSimple(id)}
+                        disabled={isPending}
+                      >
+                        تم توصيل المرتجع
+                      </button>
+                    ) : (
+                        [
+                          "pending_picked_up",
+                          "repaired_waiting_del",
+                        ] as StatusKey[]
+                      ).includes(status) ? (
                       <NextStatusButton
                         id={id}
                         currentStatus={rawStatus}
-                        onConfirm={advanceStatusAction}
-                      />
-                    ) : null
-                  ) : isUsta ? (
-                    (
-                      [
-                        "picked_up",
-                        "checking",
-                        "checked_waiting_ok",
-                        "approved_repairing",
-                      ] as StatusKey[]
-                    ).includes(status) ? (
-                      <NextStatusButton
-                        id={id}
-                        currentStatus={rawStatus}
-                        onConfirm={advanceStatusAction}
+                        onConfirm={onConfirmSimple}
                       />
                     ) : null
                   ) : (
+                    // أدوار أخرى (مثل Admin)
                     <NextStatusButton
                       id={id}
                       currentStatus={rawStatus}
-                      onConfirm={advanceStatusAction}
+                      onConfirm={onConfirmSimple}
                     />
                   )}
                 </div>
 
-                {!isUsta && (
+                {/* زر التفاصيل: مخفي للكارجو دائماً */}
+                {!(isUsta || isKargo) && (
                   <Link
                     href={`/customers/${id}`}
                     className="inline-flex items-center gap-2 px-3 py-2 rounded-xl border border-neutral-300 bg-white hover:bg-neutral-50"
-                    aria-label={`فتح تفاصيل ${name}`}
                   >
                     التفاصيل
                   </Link>
@@ -615,6 +728,9 @@ function CustomerTable({ rows, role }: { rows: Row[]; role?: string }) {
                 <th className="p-3 font-semibold">التكلفة</th>
                 <th className="p-3 font-semibold">الحالة</th>
                 <th className="p-3 font-semibold whitespace-nowrap">
+                  سبب المرتجع
+                </th>
+                <th className="p-3 font-semibold whitespace-nowrap">
                   تاريخ الإنشاء
                 </th>
                 <th className="p-3 font-semibold whitespace-nowrap">
@@ -636,12 +752,17 @@ function CustomerTable({ rows, role }: { rows: Row[]; role?: string }) {
                 const rawStatus = (r[7] ?? "picked_up") as string;
                 const createdRaw = r[8] ?? "";
                 const updatedRaw = r[9] ?? "";
+                const returnReason = r[13] ?? "";
                 const status = normalizeStatus(rawStatus) as StatusKey;
 
                 if (
                   isKargo &&
                   !(
-                    ["pending_picked_up", "repaired_waiting_del"] as StatusKey[]
+                    [
+                      "pending_picked_up",
+                      "repaired_waiting_del",
+                      "return_waiting_del",
+                    ] as StatusKey[]
                   ).includes(status)
                 )
                   return null;
@@ -695,6 +816,16 @@ function CustomerTable({ rows, role }: { rows: Row[]; role?: string }) {
                       <StatusBadge status={status} />
                     </td>
                     <td className="p-3 whitespace-nowrap">
+                      {status === "return_waiting_del" ||
+                      status === "return_delivered"
+                        ? returnReason === "no_parts"
+                          ? "عدم تواجد قطع"
+                          : returnReason === "price_disagreement"
+                          ? "عدم الاتفاق على السعر"
+                          : "—"
+                        : "—"}
+                    </td>
+                    <td className="p-3 whitespace-nowrap">
                       {formatSheetDate(createdRaw)}
                     </td>
                     <td className="p-3 whitespace-nowrap">
@@ -702,42 +833,52 @@ function CustomerTable({ rows, role }: { rows: Row[]; role?: string }) {
                     </td>
                     <td className="p-3">
                       {isKargo ? (
+                        status === "return_waiting_del" ? (
+                          <button
+                            className="inline-flex items-center gap-2 px-3 py-2 rounded-xl border border-emerald-300 bg-emerald-50 hover:bg-emerald-100 text-emerald-800 disabled:opacity-50"
+                            onClick={() => onConfirmSimple(id)}
+                            disabled={isPending}
+                          >
+                            تم توصيل المرتجع
+                          </button>
+                        ) : (
+                            [
+                              "pending_picked_up",
+                              "repaired_waiting_del",
+                            ] as StatusKey[]
+                          ).includes(status) ? (
+                          <NextStatusButton
+                            id={id}
+                            currentStatus={rawStatus}
+                            onConfirm={onConfirmSimple}
+                          />
+                        ) : null
+                      ) : isUsta ? (
                         (
                           [
-                            "pending_picked_up",
+                            "picked_up",
+                            "checking",
+                            "approved_repairing",
                             "repaired_waiting_del",
                           ] as StatusKey[]
                         ).includes(status) && (
                           <NextStatusButton
                             id={id}
                             currentStatus={rawStatus}
-                            onConfirm={advanceStatusAction}
-                          />
-                        )
-                      ) : isUsta ? (
-                        (
-                          [
-                            "picked_up",
-                            "checking",
-                            "checked_waiting_ok",
-                            "approved_repairing",
-                          ] as StatusKey[]
-                        ).includes(status) && (
-                          <NextStatusButton
-                            id={id}
-                            currentStatus={rawStatus}
-                            onConfirm={advanceStatusAction}
+                            onConfirm={onConfirmSimple}
                           />
                         )
                       ) : (
                         <NextStatusButton
                           id={id}
                           currentStatus={rawStatus}
-                          onConfirm={advanceStatusAction}
+                          onConfirm={onConfirmSimple}
                         />
                       )}
                     </td>
-                    {!isUsta && (
+
+                    {/* زر التفاصيل: مخفي للكارجو دائماً */}
+                    {!(isUsta || isKargo) && (
                       <td className="p-3 text-right">
                         <Link
                           className="inline-flex items-center gap-1 text-emerald-700 hover:text-emerald-800 underline decoration-dotted"
