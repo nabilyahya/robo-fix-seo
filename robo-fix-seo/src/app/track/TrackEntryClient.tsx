@@ -1,3 +1,4 @@
+// app/track/TrackEntryClient.tsx
 "use client";
 
 import { useRouter, useSearchParams } from "next/navigation";
@@ -39,7 +40,7 @@ export default function TrackEntryClient() {
       return;
     }
 
-    // تحقّق بشري (مجاني)
+    // تحقّق بشري (Turnstile)
     if (!tsToken) {
       setErr("Lütfen doğrulamayı tamamlayın.");
       return;
