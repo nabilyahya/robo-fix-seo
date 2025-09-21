@@ -119,6 +119,57 @@ Tüm bu adımlara rağmen robot süpürge şarj istasyonuna dönmüyor ise donan
 > Not: **Bursa robot süpürge servisi** olarak, tüm marka ve modellerde hızlı ve garantili hizmet sunuyoruz.
 `,
   },
+  {
+    slug: "robot-supurge-su-pompasi-arizalari",
+    title:
+      "Robot Süpürge Su Pompası Neden Bozulur? Başlıca Sebepler ve Çözümler",
+    excerpt:
+      "Su pompası arızaları robot süpürgelerin en sık görülen problemlerindendir. İşte yaygın nedenler ve pratik çözüm yolları.",
+    image:
+      "/blog/Robot Süpürge Su Pompası Neden Bozulur Başlıca Sebepler ve Çözümler.png",
+    date: "2025-09-21",
+    read: "5 dk",
+    tag: "Sorun Giderme",
+    keywords: [
+      "robot süpürge su pompası",
+      "robot süpürge su vermiyor",
+      "mop arızası",
+      "robot süpürge bakım",
+      "Bursa robot süpürge servisi",
+    ],
+    content: `
+### Robot Süpürge Su Pompası Arızaları
+
+Robot süpürgelerdeki **su pompası**, mop fonksiyonunun kalbi gibidir. Ancak zamanla farklı sebeplerden dolayı arıza gösterebilir.
+
+#### Yaygın Nedenler
+1. **Kireçlenme ve tortu birikimi**  
+   Sert su kullanan bölgelerde pompa kanalları kireçle tıkanabilir. Bu, su akışını engeller.
+
+2. **Filtre veya hortum tıkanıklığı**  
+   Mop haznesindeki filtre düzenli temizlenmezse pompa zorlanır ve zamanla bozulur.
+
+3. **Elektriksel arıza**  
+   Pompanın motoru aşırı ısınma veya voltaj sorunları nedeniyle yanabilir.
+
+4. **Yanlış deterjan kullanımı**  
+   Tavsiye edilmeyen sıvılar, pompa iç mekanizmasını bozarak su çıkışını engeller.
+
+#### Çözüm Önerileri
+- Mop haznesini **her kullanımdan sonra temizleyin**.  
+- Sadece **temiz ve mümkünse yumuşak su** kullanın.  
+- **Filtreleri düzenli kontrol edin** ve gerekirse değiştirin.  
+- Deterjan yerine sadece **su** veya üretici onaylı çözeltiler tercih edin.
+
+#### Ne Zaman Servise Başvurmalı?
+Eğer pompa tamamen çalışmıyor ya da cihaz sürekli **su vermiyor** hatası veriyorsa, bu durumda profesyonel servis desteği gerekir. Bursa’daki hızlı çözümler için bizimle iletişime geçebilirsiniz:  
+📞 **0551 522 2067**
+
+---
+
+> Not: **Bursa robot süpürge servisi** olarak, her marka robot süpürgede su pompası onarım ve değişim hizmeti sunuyoruz.
+`,
+  },
 ];
 
 export const getPostBySlug = (slug: string) =>
