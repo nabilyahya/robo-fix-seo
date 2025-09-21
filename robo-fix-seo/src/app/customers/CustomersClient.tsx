@@ -1,3 +1,4 @@
+// app/customers/CustomersClient.tsx
 "use client";
 
 import { useMemo, useState, useTransition } from "react";
@@ -16,7 +17,7 @@ type Row = any[];
 type Props = {
   rows?: Row[] | null;
   showSuccess?: boolean;
-  role?: string; // "Kargo" | "Usta" | "Admin" ...
+  role?: string; // "Kargo" | "Usta" | "Admin" | "CallCenter" ...
   fetchError?: string;
 };
 
@@ -85,19 +86,6 @@ function line2(
   if (daireNo) parts.push(`Daire ${daireNo}`);
   return parts.join(" • ");
 }
-function formatLocationAll(r: Row) {
-  const addr = String(r[3] ?? ""); // fallback القديم
-  const il = String(r[16] ?? "");
-  const ilce = String(r[17] ?? "");
-  const mahalle = String(r[18] ?? "");
-  const sokak = String(r[19] ?? "");
-  const apNo = String(r[20] ?? "");
-  const daireNo = String(r[21] ?? "");
-  const l1 = line1(il, ilce);
-  const l2 = line2(mahalle, sokak, apNo, daireNo);
-  const joined = pick(l1, l2).join(" — ");
-  return joined || addr || "—";
-}
 
 export default function CustomersClient({
   rows,
@@ -115,6 +103,11 @@ export default function CustomersClient({
   const isUsta = roleKey === "usta";
   const isAdmin = roleKey === "admin";
 
+  // ✅ Call Center treated like Admin
+  const isCallCenter =
+    roleKey === "callcenter" || roleKey === "call-center" || roleKey === "cc";
+  const isPriv = isAdmin || isCallCenter;
+
   // ===== refresh بعد الـ actions =====
   const router = useRouter();
   const [isPending, startTransition] = useTransition();
@@ -126,7 +119,7 @@ export default function CustomersClient({
 
   // حقول البحث
   const [q, setQ] = useState("");
-  const [passQ, setPassQ] = useState(""); // 🔎 بحث برمز الفيش
+  const [passQ, setPassQ] = useState(""); // 🔎 بحث برمز الفيش (L)
   const [status, setStatus] = useState<"" | StatusKey>("");
   const [sort, setSort] = useState<
     | "updated_desc"
@@ -553,6 +546,7 @@ export default function CustomersClient({
             isKargo={isKargo}
             isUsta={isUsta}
             isAdmin={isAdmin}
+            isPriv={isPriv}
           />
         )}
       </div>
@@ -573,6 +567,7 @@ function CustomerTable({
   isKargo,
   isUsta,
   isAdmin,
+  isPriv, // ✅ Admin أو Call Center
 }: {
   rows: Row[];
   role?: string;
@@ -589,6 +584,7 @@ function CustomerTable({
   isKargo: boolean;
   isUsta: boolean;
   isAdmin: boolean;
+  isPriv: boolean;
 }) {
   return (
     <div className="space-y-5">
@@ -706,8 +702,8 @@ function CustomerTable({
                   />
                 )}
 
-                {/* رمز الفيش — يظهر لـ Usta/Admin فقط */}
-                {(isUsta || isAdmin) && (
+                {/* رمز الفيش — يظهر لـ Usta/Admin/Call Center */}
+                {(isUsta || isPriv) && (
                   <div className="flex items-start justify-between gap-3">
                     <span className="text-neutral-500">رمز الفيش</span>
                     <span className="text-neutral-900 text-right">
@@ -737,11 +733,11 @@ function CustomerTable({
                   />
                 )}
 
-                {/* تفاصيل إضافية للـ Admin */}
-                {isAdmin && diagNote && (
+                {/* تفاصيل إضافية للـ Admin & Call Center */}
+                {isPriv && diagNote && (
                   <InfoRow label="ملاحظة الفحص" value={diagNote} clamp />
                 )}
-                {isAdmin && (
+                {isPriv && (
                   <InfoRow label="تكلفة إضافية" value={extraCost || "—"} />
                 )}
 
@@ -851,7 +847,7 @@ function CustomerTable({
                       )
                     )
                   ) : (
-                    // أدوار أخرى (مثل Admin)
+                    // أدوار أخرى (Admin/Call Center)
                     <NextStatusButton
                       id={id}
                       currentStatus={rawStatus}
@@ -898,13 +894,13 @@ function CustomerTable({
                 <th className="p-3 font-semibold">العطل</th>
                 <th className="p-3 font-semibold">التكلفة</th>
                 <th className="p-3 font-semibold">الحالة</th>
-                {(isUsta || isAdmin) && (
+                {(isUsta || isPriv) && (
                   <th className="p-3 font-semibold whitespace-nowrap">
                     رمز الفيش (L)
                   </th>
                 )}
-                {/* تفاصيل إضافية لسهولة قراءة الـ Admin */}
-                {isAdmin && (
+                {/* تفاصيل إضافية للـ Admin & Call Center */}
+                {isPriv && (
                   <>
                     <th className="p-3 font-semibold whitespace-nowrap">
                       ملاحظة الفحص (P)
@@ -1021,7 +1017,7 @@ function CustomerTable({
                       <StatusBadge status={status} />
                     </td>
 
-                    {(isUsta || isAdmin) && (
+                    {(isUsta || isPriv) && (
                       <td className="p-3 whitespace-nowrap">
                         {passCode || "—"}{" "}
                         {passCode && (
@@ -1035,8 +1031,8 @@ function CustomerTable({
                       </td>
                     )}
 
-                    {/* أعمدة الـ Admin: الملاحظة والتكلفة الإضافية */}
-                    {isAdmin && (
+                    {/* أعمدة الـ Admin & Call Center */}
+                    {isPriv && (
                       <>
                         <td
                           className="p-3 max-w-[280px] truncate"
