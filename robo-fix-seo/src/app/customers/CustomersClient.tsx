@@ -65,6 +65,40 @@ function parseDMYToEpoch(v: unknown): number | null {
   return d.getTime();
 }
 
+/* ===== Helpers لعرض الموقع ===== */
+function pick(...vals: Array<string | undefined | null>) {
+  return vals.map((x) => String(x ?? "").trim()).filter(Boolean);
+}
+function line1(il?: string, ilce?: string) {
+  return pick(il, ilce).join(" / ");
+}
+function line2(
+  mahalle?: string,
+  sokak?: string,
+  apNo?: string,
+  daireNo?: string
+) {
+  const parts: string[] = [];
+  if (mahalle) parts.push(mahalle);
+  if (sokak) parts.push(`Sokak ${sokak}`);
+  if (apNo) parts.push(`Ap No ${apNo}`);
+  if (daireNo) parts.push(`Daire ${daireNo}`);
+  return parts.join(" • ");
+}
+function formatLocationAll(r: Row) {
+  const addr = String(r[3] ?? ""); // fallback القديم
+  const il = String(r[16] ?? "");
+  const ilce = String(r[17] ?? "");
+  const mahalle = String(r[18] ?? "");
+  const sokak = String(r[19] ?? "");
+  const apNo = String(r[20] ?? "");
+  const daireNo = String(r[21] ?? "");
+  const l1 = line1(il, ilce);
+  const l2 = line2(mahalle, sokak, apNo, daireNo);
+  const joined = pick(l1, l2).join(" — ");
+  return joined || addr || "—";
+}
+
 export default function CustomersClient({
   rows,
   showSuccess,
@@ -153,10 +187,18 @@ export default function CustomersClient({
       const issue = (r[5] ?? "") as string;
       const st = normalizeStatus((r[7] ?? "picked_up") as string) as StatusKey;
 
-      const passCode = String(r[11] ?? ""); // ✅ L = index 11 (0-based)
+      const passCode = String(r[11] ?? ""); // L = index 11 (0-based)
       const returnReason = (r[13] ?? "") as string; // N
       const extraCost = String(r[14] ?? ""); // O
       const diagNote = String(r[15] ?? ""); // P
+
+      // الموقع الجديد
+      const il = String(r[16] ?? "");
+      const ilce = String(r[17] ?? "");
+      const mahalle = String(r[18] ?? "");
+      const sokak = String(r[19] ?? "");
+      const apNo = String(r[20] ?? "");
+      const daireNo = String(r[21] ?? "");
 
       if (isKargo) {
         if (
@@ -191,7 +233,7 @@ export default function CustomersClient({
 
       if (!qq) return true;
       const haystack =
-        `${name} ${phone} ${address} ${device} ${issue} ${returnReason} ${passCode} ${extraCost} ${diagNote}`.toLowerCase();
+        `${name} ${phone} ${address} ${device} ${issue} ${returnReason} ${passCode} ${extraCost} ${diagNote} ${il} ${ilce} ${mahalle} ${sokak} ${apNo} ${daireNo}`.toLowerCase();
       return haystack.includes(qq);
     });
   }, [safeRows, q, passQ, status, isKargo, isUsta]);
@@ -567,6 +609,12 @@ function CustomerTable({
           const returnReason = (r[13] ?? "") as string; // N
           const extraCost = String(r[14] ?? ""); // O
           const diagNote = String(r[15] ?? ""); // P
+          const il = String(r[16] ?? "");
+          const ilce = String(r[17] ?? "");
+          const mahalle = String(r[18] ?? "");
+          const sokak = String(r[19] ?? "");
+          const apNo = String(r[20] ?? "");
+          const daireNo = String(r[21] ?? "");
 
           const status = normalizeStatus(rawStatus) as StatusKey;
           const phoneDigits = sanitizePhone(phone);
@@ -642,10 +690,21 @@ function CustomerTable({
 
               {/* مختصر */}
               <div className="mt-3 text-sm">
-                <InfoRow
-                  label="الحالة"
-                  value={ACTION_LABELS[status] ?? status.replaceAll("_", " ")}
-                />
+                {/* الموقع (لِغير Usta) */}
+                {!isUsta && (
+                  <InfoRow
+                    label="الموقع"
+                    value={
+                      pick(
+                        line1(il, ilce),
+                        line2(mahalle, sokak, apNo, daireNo)
+                      ).join(" — ") ||
+                      address ||
+                      "—"
+                    }
+                    clamp
+                  />
+                )}
 
                 {/* رمز الفيش — يظهر لـ Usta/Admin فقط */}
                 {(isUsta || isAdmin) && (
@@ -824,7 +883,17 @@ function CustomerTable({
               <tr className="text-left text-neutral-700">
                 <th className="p-3 font-semibold">العميل</th>
                 {!isUsta && <th className="p-3 font-semibold">الهاتف</th>}
-                {!isUsta && <th className="p-3 font-semibold">العنوان</th>}
+                {/* الموقع الجديد بدل "العنوان" القديم */}
+                {!isUsta && (
+                  <>
+                    <th className="p-3 font-semibold whitespace-nowrap">
+                      İl / İlçe
+                    </th>
+                    <th className="p-3 font-semibold whitespace-nowrap">
+                      Mahalle • Sokak • No
+                    </th>
+                  </>
+                )}
                 <th className="p-3 font-semibold">الجهاز</th>
                 <th className="p-3 font-semibold">العطل</th>
                 <th className="p-3 font-semibold">التكلفة</th>
@@ -874,6 +943,12 @@ function CustomerTable({
                 const returnReason = r[13] ?? ""; // N
                 const extraCost = String(r[14] ?? ""); // O
                 const diagNote = String(r[15] ?? ""); // P
+                const il = String(r[16] ?? "");
+                const ilce = String(r[17] ?? "");
+                const mahalle = String(r[18] ?? "");
+                const sokak = String(r[19] ?? "");
+                const apNo = String(r[20] ?? "");
+                const daireNo = String(r[21] ?? "");
                 const status = normalizeStatus(rawStatus) as StatusKey;
 
                 if (
@@ -901,6 +976,9 @@ function CustomerTable({
                 )
                   return null;
 
+                const l1 = line1(il, ilce);
+                const l2 = line2(mahalle, sokak, apNo, daireNo);
+
                 return (
                   <tr key={id} className="border-t hover:bg-neutral-50">
                     <td
@@ -909,17 +987,23 @@ function CustomerTable({
                     >
                       {name}
                     </td>
+
                     {!isUsta && (
                       <td className="p-3 whitespace-nowrap">{phone}</td>
                     )}
+
                     {!isUsta && (
-                      <td
-                        className="p-3 max-w-[320px] truncate"
-                        title={String(address)}
-                      >
-                        {address}
-                      </td>
+                      <>
+                        <td className="p-3 whitespace-nowrap">{l1 || "—"}</td>
+                        <td
+                          className="p-3 max-w-[320px] truncate"
+                          title={l2 || address}
+                        >
+                          {l2 || address || "—"}
+                        </td>
+                      </>
                     )}
+
                     <td
                       className="p-3 max-w-[220px] truncate"
                       title={String(device)}
@@ -969,9 +1053,9 @@ function CustomerTable({
                     <td className="p-3 whitespace-nowrap">
                       {status === "return_waiting_del" ||
                       status === "return_delivered"
-                        ? returnReason === "no_parts"
+                        ? (returnReason as string) === "no_parts"
                           ? "عدم تواجد قطع"
-                          : returnReason === "price_disagreement"
+                          : (returnReason as string) === "price_disagreement"
                           ? "عدم الاتفاق على السعر"
                           : "—"
                         : "—"}
@@ -1054,7 +1138,7 @@ function CustomerTable({
                           >
                             <path
                               fill="currentColor"
-                              d="M13 5ل7 7-7 7v-4H4v-6h9V5z"
+                              d="M13 5l7 7-7 7v-4H4v-6h9V5z"
                             />
                           </svg>
                         </Link>

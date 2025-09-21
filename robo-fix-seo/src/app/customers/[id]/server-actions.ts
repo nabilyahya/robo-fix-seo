@@ -5,9 +5,8 @@ import { StatusKey } from "@/components/StatusBadge";
 import { SHEET_NAME, findRowById, updateCells } from "@/lib/sheets";
 import { revalidatePath } from "next/cache";
 
-// ثوابت الأعمدة حسب شيتك الحالي:
 const COL_STATUS = "H"; // الحالة
-const COL_UPDATED = "K"; // آخر تحديث
+const COL_UPDATED = "J"; // ✅ آخر تحديث الصحيح
 
 export async function updateStatus(id: string, nextStatus: StatusKey) {
   const { rowIndex, row } = await findRowById(id);
@@ -17,15 +16,9 @@ export async function updateStatus(id: string, nextStatus: StatusKey) {
   const rUpdated = `'${SHEET_NAME}'!${COL_UPDATED}${rowIndex}:${COL_UPDATED}${rowIndex}`;
 
   await updateCells(rStatus, [[nextStatus]]);
+  await updateCells(rUpdated, [[new Date().toISOString()]]);
   revalidatePath(`/customers/${id}`);
   revalidatePath("/customers");
-  await updateCells(rUpdated, [[new Date().toISOString()]]);
 
-  return {
-    ok: true,
-    id,
-    status: nextStatus,
-    rowIndex,
-    ranges: { rStatus, rUpdated },
-  };
+  return { ok: true, id, status: nextStatus, rowIndex };
 }

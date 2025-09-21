@@ -17,9 +17,7 @@ import { sendWhatsAppText } from "@/lib/whatsapp";
 import { google } from "googleapis";
 import { renderReceiptPdfBuffer } from "@/templates/receipt-pdf";
 
-/* ============================
-   Logs
-============================ */
+/* ============================ */
 const TAG = "[createCustomer]";
 function log(msg: string, meta?: unknown) {
   if (meta !== undefined) {
@@ -39,10 +37,8 @@ function logError(msg: string, err: unknown) {
       : err;
   console.error(`${TAG} ${msg}`, safe);
 }
+/* ============================ */
 
-/* ============================
-   Helpers
-============================ */
 function siteBaseUrl() {
   return (
     process.env.NEXT_PUBLIC_SITE_URL ||
@@ -68,9 +64,7 @@ async function genUniqueReceiptNo(): Promise<string> {
   }
 }
 
-/* ============================
-   Google Drive auth
-============================ */
+/* ============= Drive Auth ============= */
 function loadServiceAccountJSON(): any {
   const inline = process.env.GOOGLE_SERVICE_ACCOUNT_KEY;
   const fromFile = process.env.GOOGLE_SERVICE_ACCOUNT_KEY_FILE
@@ -113,14 +107,12 @@ function getDriveClient() {
   return google.drive({ version: "v3", auth });
 }
 
-// googleapis يتوقع Stream في media.body
 function bufferToStream(buf: Buffer) {
   const stream = new PassThrough();
   stream.end(buf);
   return stream;
 }
 
-// إعادة المحاولة على أخطاء الشبكة
 async function uploadWithRetry<T>(
   fn: () => Promise<T>,
   label: string,
@@ -192,10 +184,28 @@ async function uploadPdfToDrive(
   return { fileId, viewUrl, directUrl };
 }
 
-/* ============================
-   Main Action
-============================ */
+/* ============= Main Action ============= */
 const INITIAL_STATUS = "pending_picked_up";
+
+function buildFullAddress(parts: {
+  il?: string;
+  ilce?: string;
+  mahalle?: string;
+  sokak?: string;
+  apNo?: string;
+  daireNo?: string;
+}) {
+  const sec1 = [parts.il, parts.ilce].filter(Boolean).join(" / ");
+  const sec2 = [parts.mahalle, parts.sokak].filter(Boolean).join(", ");
+  const sec3 = [
+    parts.apNo ? `Ap No ${parts.apNo}` : "",
+    parts.daireNo ? `Daire No ${parts.daireNo}` : "",
+  ]
+    .filter(Boolean)
+    .join(", ");
+
+  return [sec1, sec2, sec3].filter(Boolean).join(" — ");
+}
 
 export async function createCustomer(formData: FormData) {
   log("action started");
@@ -203,7 +213,18 @@ export async function createCustomer(formData: FormData) {
   // 1) form
   const name = String(formData.get("name") || "").trim();
   const phone = String(formData.get("phone") || "").trim();
-  const address = String(formData.get("address") || "").trim();
+
+  // العنوان المجزأ
+  const il = String(formData.get("il") || "").trim() || "Bursa";
+  const ilce = String(formData.get("ilce") || "").trim();
+  const mahalle = String(formData.get("mahalle") || "").trim();
+  const sokak = String(formData.get("sokak") || "").trim();
+  const apNo = String(formData.get("apNo") || "").trim();
+  const daireNo = String(formData.get("daireNo") || "").trim();
+
+  // نجمع عنوانًا نصيًا مختصرًا لعمود D والـPDF
+  const address = buildFullAddress({ il, ilce, mahalle, sokak, apNo, daireNo });
+
   const deviceType = String(formData.get("deviceType") || "").trim();
   const issue = String(formData.get("issue") || "").trim();
   const repairCost = String(formData.get("repairCost") || "").trim();
@@ -218,7 +239,13 @@ export async function createCustomer(formData: FormData) {
   log("form read", {
     hasName: !!name,
     hasPhone: !!phone,
-    hasAddress: !!address,
+    address,
+    il,
+    ilce,
+    mahalle,
+    sokak,
+    apNo,
+    daireNo,
     hasDeviceType: !!deviceType,
     hasIssue: !!issue,
     hasRepairCost: repairCost !== "",
@@ -244,12 +271,12 @@ export async function createCustomer(formData: FormData) {
   // 3) status
   const status = normalizeStatus(INITIAL_STATUS);
 
-  // 4) save to Sheets (A..L)
+  // 4) save to Sheets (A..L) — نكتب D بالعنوان الموحّد للتوافق
   await appendCustomerRow12([
     id, // A
     name, // B
     phone, // C
-    address, // D
+    address, // D (الموحّد)
     deviceType, // E
     issue, // F
     repairCost, // G
@@ -260,6 +287,18 @@ export async function createCustomer(formData: FormData) {
     passCode, // L
   ]);
   log("sheet appended", { id, publicId });
+
+  // بعد الإضافة: حدّد الصف ثم خزّن أجزاء العنوان في Q..V
+  const { rowIndex } = await findRowByPublicId(publicId);
+  if (rowIndex > 0) {
+    // Q..V = il, ilce, mahalle, sokak, apNo, daireNo
+    await updateCells(`${SHEET_NAME}!Q${rowIndex}:V${rowIndex}`, [
+      [il, ilce, mahalle, sokak, apNo, daireNo],
+    ]);
+    log("address parts written Q..V", { rowIndex });
+  } else {
+    log("warning: could not locate row for address parts", { publicId });
+  }
 
   // 5) PDF (React-PDF) -> Drive
   const base = siteBaseUrl();
@@ -275,7 +314,7 @@ export async function createCustomer(formData: FormData) {
       dateStr: dateHuman,
       name,
       phone,
-      address,
+      address, // الموحّد
       deviceType,
       issue,
       companyName: "Robonarim",
@@ -294,12 +333,10 @@ export async function createCustomer(formData: FormData) {
 
     // ✅ تحديث العمود M برابط التحميل
     if (pdfDirectUrl) {
-      const { rowIndex } = await findRowByPublicId(publicId);
-      if (rowIndex > 0) {
-        await updateCells(`${SHEET_NAME}!M${rowIndex}:M${rowIndex}`, [
-          [pdfDirectUrl],
-        ]);
-        log("sheet M updated", { rowIndex, pdfDirectUrl });
+      const { rowIndex: idx } = await findRowByPublicId(publicId);
+      if (idx > 0) {
+        await updateCells(`${SHEET_NAME}!M${idx}:M${idx}`, [[pdfDirectUrl]]);
+        log("sheet M updated", { idx, pdfDirectUrl });
       } else {
         log("sheet M skipped: publicId not found", { publicId });
       }
@@ -316,6 +353,7 @@ export async function createCustomer(formData: FormData) {
       `📢 عميل جديد تمّت إضافته\n\n` +
       `👤 الاسم: ${name}\n` +
       `📱 الهاتف: ${phone}\n` +
+      `📍 العنوان: ${address}\n` +
       `🧾 رقم الفيش: ${publicId}\n` +
       `🔗 رابط التتبّع: ${trackUrl}\n` +
       `🔐 رمز التتبّع: ${passCode}\n` +

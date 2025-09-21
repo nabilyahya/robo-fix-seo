@@ -24,7 +24,6 @@ export default function CustomerForm() {
     }
   }
 
-  // بديل بدون ريفريش (اختياري)
   function softResetForm() {
     setResult(null);
     setErr(null);
@@ -61,6 +60,7 @@ export default function CustomerForm() {
         }}
         className="grid grid-cols-1 gap-4 bg-white p-6 rounded-2xl shadow border"
       >
+        {/* معلومات أساسية */}
         <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
           <input
             name="name"
@@ -76,13 +76,57 @@ export default function CustomerForm() {
             required
             disabled={isPending}
           />
-          <input
-            name="address"
-            placeholder="العنوان"
-            className="input md:col-span-2"
-            required
-            disabled={isPending}
-          />
+
+          {/* ===== العنوان (مجزأ) ===== */}
+          <div className="md:col-span-2">
+            <div className="text-sm font-medium text-slate-700 mb-2">
+              العنوان
+            </div>
+            <div className="grid grid-cols-1 md:grid-cols-6 gap-4">
+              <input
+                name="il"
+                defaultValue="Bursa"
+                className="input md:col-span-2"
+                readOnly
+              />
+              <input
+                name="ilce"
+                placeholder="İlçe (القضاء)"
+                className="input md:col-span-2"
+                required
+                disabled={isPending}
+              />
+              <input
+                name="mahalle"
+                placeholder="Mahalle (الحي)"
+                className="input md:col-span-2"
+                required
+                disabled={isPending}
+              />
+
+              <input
+                name="sokak"
+                placeholder="Sokak (الشارع)"
+                className="input md:col-span-3"
+                required
+                disabled={isPending}
+              />
+              <input
+                name="apNo"
+                placeholder="Ap No (رقم البناء)"
+                className="input md:col-span-1"
+                disabled={isPending}
+              />
+              <input
+                name="daireNo"
+                placeholder="Daire No (رقم الشقة)"
+                className="input md:col-span-2"
+                disabled={isPending}
+              />
+            </div>
+          </div>
+          {/* ========================== */}
+
           <input
             name="deviceType"
             placeholder="نوع الجهاز / الموديل"
@@ -165,7 +209,6 @@ export default function CustomerForm() {
             <span className="font-mono">{result.pass}</span>
           </div>
 
-          {/* أزرار PDF + إجراءات */}
           <div className="mt-4 flex flex-wrap items-center gap-3">
             {result.pdfDirectUrl ? (
               <a
@@ -193,7 +236,6 @@ export default function CustomerForm() {
               </a>
             )}
 
-            {/* ✅ نسخ الرمز بدل رقم الفيش */}
             <button
               type="button"
               onClick={() =>
@@ -206,7 +248,6 @@ export default function CustomerForm() {
               نسخ الرمز
             </button>
 
-            {/* الزر المهم: عميل جديد (ريفريش نظيف) */}
             <button
               type="button"
               onClick={hardReloadSamePage}
@@ -216,16 +257,14 @@ export default function CustomerForm() {
               إضافة عميل جديد
             </button>
 
-            {/* بديل بدون ريفريش — فعّله إذا حبيت */}
-            {/*
-            <button
+            {/* بديل بدون ريفريش */}
+            {/* <button
               type="button"
               onClick={softResetForm}
               className="inline-flex items-center gap-2 px-4 py-2 rounded-xl border border-slate-300 text-slate-700 hover:bg-slate-50"
             >
               إعادة الضبط بدون تحديث
-            </button>
-            */}
+            </button> */}
           </div>
 
           <div className="text-xs text-slate-600 mt-2">
