@@ -24,34 +24,47 @@ export default function SummaryCards() {
   const income = sum(data.filter((d) => d.type === "income").map((d) => d.net));
   const expense = sum(
     data.filter((d) => d.type === "expense").map((d) => d.gross)
-  ); // كمصروف احسب الإجمالي بضريبته
+  );
   const taxOut = sum(
     data.filter((d) => d.type === "expense").map((d) => d.tax)
   );
   const taxIn = sum(data.filter((d) => d.type === "income").map((d) => d.tax));
   const profit = Math.round((income - expense) * 100) / 100;
 
+  const cards = [
+    {
+      title: `وارد (Net) — ${monthIso}`,
+      value: `${income.toLocaleString()} TRY`,
+    },
+    { title: `مصروف (Gross)`, value: `${expense.toLocaleString()} TRY` },
+    {
+      title: `ضريبة المبيعات (In/Out)`,
+      value: `+${taxIn.toLocaleString()} / -${taxOut.toLocaleString()}`,
+    },
+    { title: `الربح/الخسارة`, value: `${profit.toLocaleString()} TRY` },
+  ];
+
   return (
-    <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
-      <Card
-        title={`وارد (Net) — ${monthIso}`}
-        value={`${income.toLocaleString()} TRY`}
-      />
-      <Card title={`مصروف (Gross)`} value={`${expense.toLocaleString()} TRY`} />
-      <Card
-        title={`ضريبة المبيعات (In/Out)`}
-        value={`+${taxIn.toLocaleString()} / -${taxOut.toLocaleString()}`}
-      />
-      <Card title={`الربح/الخسارة`} value={`${profit.toLocaleString()} TRY`} />
+    // موبايل: 2x2 بدون سكرول — ديسكتوب: 4 أعمدة كما هو
+    <div className="grid grid-cols-2 gap-3 md:grid-cols-4 md:gap-4">
+      {cards.map((c, i) => (
+        <Card key={i} title={c.title} value={c.value} />
+      ))}
     </div>
   );
 }
 
 function Card({ title, value }: { title: string; value: string }) {
   return (
-    <div className="rounded-2xl border bg-white p-4 shadow-sm">
-      <div className="text-xs text-slate-500">{title}</div>
-      <div className="mt-2 text-xl font-semibold">{value}</div>
+    <div className="h-full rounded-2xl border bg-white p-3 sm:p-4 shadow-sm">
+      {/* عنوان صغير قليلاً على الموبايل مع سطرين كحد أقصى */}
+      <div className="text-[10.5px] sm:text-xs text-slate-500 leading-snug line-clamp-2">
+        {title}
+      </div>
+      {/* قيمة أوضح — تكبير بسيط على الشاشات الأكبر */}
+      <div className="mt-2 text-base sm:text-xl font-semibold tracking-tight">
+        {value}
+      </div>
     </div>
   );
 }
