@@ -1,4 +1,3 @@
-// src/lib/sheets.ts
 import fs from "node:fs";
 import { google } from "googleapis";
 
@@ -32,6 +31,9 @@ export async function sheetsClient() {
   return google.sheets({ version: "v4", auth });
 }
 
+/* =========================================================
+   Customers sheet (الموجود سابقاً) — لا تغيير على السلوك
+========================================================= */
 export const SHEET_NAME = "Customers" as const;
 
 /** ✅ ما زلنا نضيف صفوف جديدة حتى L (12 عمودًا) */
@@ -230,4 +232,226 @@ export async function isValueUsed(
   return rows.some(
     (r) => (r[colIndex] ?? "").toString().trim() === value.trim()
   );
+}
+
+/* =========================================================
+   Finance sheet (جديد)
+   الأعمدة: A:date, B:type, C:category, D:amount, E:currency,
+            F:tax_rate, G:tax_included, H:net, I:tax, J:gross,
+            K:party, L:method, M:note, N:ref_id, O:created_at
+========================================================= */
+
+export const FINANCE_SHEET = "Finance" as const;
+const FIN_LAST_COL = "O" as const;
+const FIN_RANGE_ALL = `${FINANCE_SHEET}!A:${FIN_LAST_COL}` as const;
+
+/** نوع الحركة */
+export type TxType = "income" | "expense";
+
+/** واجهة صف المالية */
+export interface FinanceRow {
+  date: string; // yyyy-mm-dd
+  type: TxType;
+  category: string;
+  amount: number;
+  currency: string; // TRY
+  tax_rate: number; // %
+  tax_included: boolean;
+  net: number;
+  tax: number;
+  gross: number;
+  party?: string;
+  method?: string;
+  note?: string;
+  ref_id?: string;
+  created_at: string; // ISO
+}
+
+/** مساعد لحساب الضريبة (اختياري للاستخدام) */
+export function computeFinanceAmounts(
+  amount: number,
+  taxRate: number,
+  taxIncluded: boolean
+) {
+  const r = taxRate / 100;
+  if (taxIncluded) {
+    const net = amount / (1 + r);
+    const tax = amount - net;
+    return {
+      net: round2(net),
+      tax: round2(tax),
+      gross: round2(amount),
+    };
+  } else {
+    const tax = amount * r;
+    const gross = amount + tax;
+    return {
+      net: round2(amount),
+      tax: round2(tax),
+      gross: round2(gross),
+    };
+  }
+}
+function round2(n: number) {
+  return Math.round(n * 100) / 100;
+}
+
+/** إضافة صف للـ Finance (كائن عالي المستوى)
+ *  - إن لم تُمرَّر net/tax/gross سنحسبها تلقائيًا من amount/tax_rate/tax_included
+ */
+export async function appendFinanceRow(input: {
+  date: string;
+  type: TxType;
+  category: string;
+  amount: number;
+  currency?: string;
+  tax_rate?: number;
+  tax_included?: boolean;
+  party?: string;
+  method?: string;
+  note?: string;
+  ref_id?: string;
+  // اختياري: لو حسبتها مسبقًا
+  net?: number;
+  tax?: number;
+  gross?: number;
+}) {
+  const currency = input.currency ?? "TRY";
+  const tax_rate = input.tax_rate ?? 20;
+  const tax_included = input.tax_included ?? false;
+
+  const computed =
+    typeof input.net === "number" &&
+    typeof input.tax === "number" &&
+    typeof input.gross === "number"
+      ? { net: input.net, tax: input.tax, gross: input.gross }
+      : computeFinanceAmounts(input.amount, tax_rate, tax_included);
+
+  const created_at = new Date().toISOString();
+
+  const row = [
+    input.date,
+    input.type,
+    input.category,
+    input.amount,
+    currency,
+    tax_rate,
+    tax_included ? "TRUE" : "FALSE",
+    computed.net,
+    computed.tax,
+    computed.gross,
+    input.party ?? "",
+    input.method ?? "",
+    input.note ?? "",
+    input.ref_id ?? "",
+    created_at,
+  ];
+
+  const sheets = await sheetsClient();
+  await sheets.spreadsheets.values.append({
+    spreadsheetId: process.env.GOOGLE_SHEETS_ID!,
+    range: FIN_RANGE_ALL,
+    valueInputOption: "USER_ENTERED",
+    requestBody: { values: [row] },
+  });
+}
+
+/** قراءة جميع الصفوف (مع الرؤوس) */
+export async function readFinanceRaw(): Promise<string[][]> {
+  const sheets = await sheetsClient();
+  const res = await sheets.spreadsheets.values.get({
+    spreadsheetId: process.env.GOOGLE_SHEETS_ID!,
+    range: FIN_RANGE_ALL,
+  });
+  return (res.data.values ?? []) as string[][];
+}
+
+/** قراءة ككائنات (skip header) + فلاتر اختيارية */
+export async function listFinanceRows(opts?: {
+  from?: string; // yyyy-mm-dd
+  to?: string; // yyyy-mm-dd
+  type?: TxType;
+}): Promise<FinanceRow[]> {
+  const values = await readFinanceRaw();
+  if (values.length <= 1) return [];
+
+  const body = values.slice(1); // تخطي الرؤوس
+
+  const rows: FinanceRow[] = body
+    .filter((r) => r && r.length >= 4)
+    .map((r) => {
+      const [
+        date,
+        type,
+        category,
+        amount,
+        currency,
+        tax_rate,
+        tax_included,
+        net,
+        tax,
+        gross,
+        party,
+        method,
+        note,
+        ref_id,
+        created_at,
+      ] = r;
+
+      return {
+        date: (date || "").toString(),
+        type: ((type || "").toString() as TxType) || "expense",
+        category: (category || "").toString(),
+        amount: Number(amount || 0),
+        currency: (currency || "TRY").toString(),
+        tax_rate: Number(tax_rate || 0),
+        tax_included: (tax_included || "").toString().toUpperCase() === "TRUE",
+        net: Number(net || 0),
+        tax: Number(tax || 0),
+        gross: Number(gross || 0),
+        party: (party || "").toString(),
+        method: (method || "").toString(),
+        note: (note || "").toString(),
+        ref_id: (ref_id || "").toString(),
+        created_at: (created_at || "").toString(),
+      };
+    })
+    .filter((row) => {
+      if (opts?.type && row.type !== opts.type) return false;
+      if (opts?.from && row.date && row.date < opts.from) return false;
+      if (opts?.to && row.date && row.date > opts.to) return false;
+      return true;
+    });
+
+  return rows;
+}
+
+/** ملخّص سريع لفترة محددة (اختياري) */
+export async function summarizeFinance(opts?: { from?: string; to?: string }) {
+  const rows = await listFinanceRows(opts);
+  const income = rows.filter((r) => r.type === "income");
+  const expense = rows.filter((r) => r.type === "expense");
+
+  const sum = (arr: number[]) =>
+    Math.round(arr.reduce((a, b) => a + b, 0) * 100) / 100;
+
+  const incomeNet = sum(income.map((r) => r.net));
+  const incomeTax = sum(income.map((r) => r.tax));
+  const incomeGross = sum(income.map((r) => r.gross));
+
+  const expenseNet = sum(expense.map((r) => r.net));
+  const expenseTax = sum(expense.map((r) => r.tax));
+  const expenseGross = sum(expense.map((r) => r.gross));
+
+  const profit = Math.round((incomeNet - expenseGross) * 100) / 100;
+
+  return {
+    incomeNet,
+    incomeTax,
+    incomeGross,
+    expenseNet,
+    expenseTax,
+    expenseGross,
+    profit,
+  };
 }

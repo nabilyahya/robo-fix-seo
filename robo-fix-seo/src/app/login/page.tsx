@@ -1,13 +1,20 @@
+// app/login/page.tsx
 import Image from "next/image";
 import logo from "../../../public/logo.png";
+
 export default async function Page({
   searchParams,
 }: {
-  // في Next 15 قد تكون Promise
   searchParams?: Promise<Record<string, string | string[]>>;
 }) {
   const sp = (await searchParams) ?? {};
   const errorParam = Array.isArray(sp.error) ? sp.error[0] : sp.error;
+  const nextParam = Array.isArray(sp.next) ? sp.next[0] : sp.next;
+
+  const next =
+    typeof nextParam === "string" && nextParam.startsWith("/")
+      ? nextParam
+      : "/customers";
 
   const errorMsg =
     errorParam === "missing"
@@ -18,12 +25,10 @@ export default async function Page({
 
   return (
     <main className="min-h-screen bg-gradient-to-br from-slate-900 via-slate-800 to-emerald-900 text-slate-50 relative overflow-hidden">
-      {/* نسيج خفيف على الخلفية */}
       <div className="pointer-events-none absolute inset-0 opacity-20 mix-blend-overlay [background-image:radial-gradient(#ffffff22_1px,transparent_1px)] [background-size:16px_16px]" />
 
       <div className="relative z-10 flex min-h-screen items-center justify-center p-4">
         <div className="w-full max-w-md">
-          {/* الهيدر: الشعار + العنوان */}
           <div className="mb-6 flex items-center gap-3">
             <Image
               src={logo}
@@ -39,7 +44,6 @@ export default async function Page({
             </div>
           </div>
 
-          {/* الكارت */}
           <div className="rounded-2xl bg-white/95 backdrop-blur ring-1 ring-black/5 shadow-xl p-6 sm:p-7">
             {errorMsg && (
               <div className="mb-4 rounded-lg border border-red-200 bg-red-50 px-3 py-2 text-sm text-red-700">
@@ -47,9 +51,10 @@ export default async function Page({
               </div>
             )}
 
-            {/* مهم: POST إلى /api/login (Route Handler) */}
+            {/* POST إلى /api/login */}
             <form action="/api/login" method="POST" className="space-y-4">
-              {/* اسم المستخدم */}
+              <input type="hidden" name="next" value={next} />{" "}
+              {/* ✅ تمرير الوجهة */}
               <div>
                 <label
                   htmlFor="name"
@@ -67,7 +72,6 @@ export default async function Page({
                                focus:border-emerald-500 focus:ring-4 focus:ring-emerald-200"
                     placeholder="مثال: Nabil"
                   />
-                  {/* أيقونة */}
                   <svg
                     viewBox="0 0 24 24"
                     className="pointer-events-none absolute right-3 top-1/2 -translate-y-1/2 h-5 w-5 text-slate-400 peer-focus:text-emerald-500"
@@ -80,8 +84,6 @@ export default async function Page({
                   </svg>
                 </div>
               </div>
-
-              {/* كلمة المرور */}
               <div>
                 <label
                   htmlFor="password"
@@ -100,7 +102,6 @@ export default async function Page({
                                focus:border-emerald-500 focus:ring-4 focus:ring-emerald-200"
                     placeholder="••••••"
                   />
-                  {/* أيقونة */}
                   <svg
                     viewBox="0 0 24 24"
                     className="pointer-events-none absolute right-3 top-1/2 -translate-y-1/2 h-5 w-5 text-slate-400 peer-focus:text-emerald-500"
@@ -113,8 +114,6 @@ export default async function Page({
                   </svg>
                 </div>
               </div>
-
-              {/* زر الدخول */}
               <button className="mt-2 w-full rounded-xl bg-emerald-600 px-4 py-2.5 text-white font-medium shadow-lg shadow-emerald-600/20 hover:bg-emerald-700 focus:outline-none focus:ring-4 focus:ring-emerald-300 active:bg-emerald-800 transition">
                 دخول
               </button>
@@ -126,7 +125,6 @@ export default async function Page({
             </p>
           </div>
 
-          {/* فوتر */}
           <p className="mt-6 text-center text-xs text-slate-300">
             © {new Date().getFullYear()} Robonarim. كل الحقوق محفوظة.
           </p>

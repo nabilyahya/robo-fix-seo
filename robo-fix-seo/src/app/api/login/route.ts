@@ -1,3 +1,4 @@
+// app/api/login/route.ts
 import { NextResponse } from "next/server";
 import crypto from "crypto";
 
@@ -5,7 +6,6 @@ const COOKIE_NAME = "robosess";
 const DEFAULT_MAX_AGE = 15 * 24 * 60 * 60; // 15 يوم
 const SESSION_SECRET = process.env.SESSION_SECRET ?? "";
 
-/* توقيع الجلسة */
 type SessionPayload = { id: string; name: string; role?: string; exp: number };
 
 function signSession(
@@ -22,7 +22,7 @@ function signSession(
   return `${base}.${sig}`;
 }
 
-/* بيانات مؤقتة للتطوير – بدّلها بربط Google Sheets لاحقًا */
+/* بيانات مؤقتة للتطوير */
 type UserRow = { id: string; name: string; role: string; password: string };
 async function fetchUsers(): Promise<UserRow[]> {
   return [
@@ -33,36 +33,43 @@ async function fetchUsers(): Promise<UserRow[]> {
   ];
 }
 
-/* POST /api/login */
+function isSafePath(p: string) {
+  return !!p && p.startsWith("/") && !p.startsWith("//");
+}
+
 export async function POST(req: Request) {
   const form = await req.formData();
   const name = (form.get("name") ?? "").toString().trim();
   const password = (form.get("password") ?? "").toString();
+  const nextParam = (form.get("next") ?? "").toString().trim();
 
   const url = new URL(req.url);
+  const mkErr = (code: "missing" | "invalid") => {
+    const to = new URL("/login", url);
+    to.searchParams.set("error", code);
+    if (isSafePath(nextParam)) to.searchParams.set("next", nextParam);
+    return NextResponse.redirect(to, 303);
+  };
 
-  if (!name || !password) {
-    return NextResponse.redirect(new URL("/login?error=missing", url), 303);
-  }
+  if (!name || !password) return mkErr("missing");
 
   const users = await fetchUsers();
   const user = users.find((u) => u.name.toLowerCase() === name.toLowerCase());
-  if (!user || user.password !== password) {
-    return NextResponse.redirect(new URL("/login?error=invalid", url), 303);
-  }
+  if (!user || user.password !== password) return mkErr("invalid");
 
-  const token = signSession({ id: user.id, name: user.name, role: user.role });
+  const role = (user.role || "").toLowerCase(); // ✅
+  const token = signSession({ id: user.id, name: user.name, role });
 
-  const res = NextResponse.redirect(new URL("/customers", url), 303);
+  const dest = isSafePath(nextParam) ? nextParam : "/customers";
+  const res = NextResponse.redirect(new URL(dest, url), 303);
   res.cookies.set({
     name: COOKIE_NAME,
     value: token,
     httpOnly: true,
     sameSite: "lax",
     path: "/",
-    secure: true, // على Vercel دائماً HTTPS
+    secure: process.env.NODE_ENV === "production",
     maxAge: DEFAULT_MAX_AGE,
   });
-
   return res;
 }
